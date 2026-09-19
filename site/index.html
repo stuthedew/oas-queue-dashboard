@@ -112,6 +112,12 @@ button { font: inherit; color: inherit; }
 .chart .pill-new rect { fill: var(--new-tint); } .chart .pill-new text { fill: var(--new-ink); }
 .chart .pill-clr rect { fill: var(--cleared-tint); } .chart .pill-clr text { fill: var(--cleared-ink); }
 .chart .pill text { font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums; }
+.chart .l-ratio { fill: none; stroke: var(--open); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.chart .dot-ratio { fill: var(--open); }
+.chart .ref { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 4; }
+.chart .ref-label { fill: var(--muted); text-anchor: start; }
+.chart .pill-ratio rect { fill: var(--open-tint); } .chart .pill-ratio text { fill: var(--open-ink); }
+.chart-title { font-size: 16px; font-weight: 700; margin: 18px 0 4px; }
 .chart .xhair { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 3 3; }
 .chart .hit { fill: transparent; cursor: crosshair; }
 .tip { position: absolute; pointer-events: none; background: var(--paper); color: var(--ink); border: 1px solid var(--rule); border-radius: 10px; padding: 8px 10px; font-size: 13px; line-height: 1.4; min-width: 176px; z-index: 2; }
@@ -248,6 +254,9 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       </div>
       <div class="chart" id="chart-all" data-height="330" tabindex="0"></div>
       <div class="legend" id="legend-all"></div>
+      <h3 class="chart-title">Filed per cleared, trailing 7 days</h3>
+      <p class="panel-sub">For each day, the ratio of items filed to items cleared over the week ending that day. Above the dashed line at 1.0 the queue is growing faster than it clears; below it, shrinking.</p>
+      <div class="chart" id="chart-all-ratio" data-height="180" tabindex="0"></div>
     </section>
 
     <div class="lanes">
@@ -256,12 +265,16 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
         <p class="panel-sub num" id="sub-p"></p>
         <p class="ratio" id="ratio-p"></p>
         <div class="chart" id="chart-p" data-height="230" tabindex="0"></div>
+        <h3 class="chart-title">Filed per cleared, trailing 7 days</h3>
+        <div class="chart" id="chart-p-ratio" data-height="150" tabindex="0"></div>
       </section>
       <section class="panel lane">
         <h2>Workflow lane</h2>
         <p class="panel-sub num" id="sub-w"></p>
         <p class="ratio" id="ratio-w"></p>
         <div class="chart" id="chart-w" data-height="230" tabindex="0"></div>
+        <h3 class="chart-title">Filed per cleared, trailing 7 days</h3>
+        <div class="chart" id="chart-w-ratio" data-height="150" tabindex="0"></div>
       </section>
     </div>
     <p class="also num" id="also"></p>
@@ -437,13 +450,33 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     ? `Last 7 days: <b class="num">${n(w.f)}</b> filed, <b class="num">${n(w.c)}</b> cleared, <b class="num">${(w.ratio).toFixed(2)}</b> filed per cleared`
     : `Last 7 days: <b class="num">${n(w.f)}</b> filed, none cleared`;
 
+  // One point per day in [start, end]: filed and cleared over the trailing `window`
+  // days ending that day, and their ratio (null where nothing cleared in the window).
+  function rollingRatio(items, start, end, window = 7) {
+    const from = start - (window - 1);
+    const len = end - from + 1;
+    const dayNew = new Array(len).fill(0), dayClr = new Array(len).fill(0);
+    for (const it of items) {
+      if (it.added != null && it.added >= from && it.added <= end) dayNew[it.added - from]++;
+      if (CLOSED.includes(it.status) && it.closed != null && it.closed >= from && it.closed <= end) dayClr[it.closed - from]++;
+    }
+    const filed = [], cleared = [], ratio = [];
+    let wf = 0, wc = 0;
+    for (let i = 0; i < len; i++) {
+      wf += dayNew[i]; wc += dayClr[i];
+      if (i >= window) { wf -= dayNew[i - window]; wc -= dayClr[i - window]; }
+      if (i >= window - 1) { filed.push(wf); cleared.push(wc); ratio.push(wc > 0 ? wf / wc : null); }
+    }
+    return { start, len: end - start + 1, window, filed, cleared, ratio };
+  }
+
   /* ---------- chart ---------- */
-  function niceStep(max, count) {
+  function niceStep(max, count, min = 1) {
     const raw = max / count;
     const p = Math.pow(10, Math.floor(Math.log10(raw)));
     const ks = p < 10 ? [1, 2, 5, 10] : [1, 2, 2.5, 5, 10];
-    for (const k of ks) if (k * p >= raw) return Math.max(1, k * p);
-    return Math.max(1, 10 * p);
+    for (const k of ks) if (k * p >= raw) return Math.max(min, k * p);
+    return Math.max(min, 10 * p);
   }
 
   function tangents(xs, ys) {
@@ -493,7 +526,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
 
   const charts = new Map();
   function drawChart(host, agg, label) {
-    charts.set(host.id, { agg, label });
+    charts.set(host.id, { redraw: () => drawChart(host, agg, label) });
     const W = Math.max(260, Math.floor(host.clientWidth));
     const compact = W < 540;
     const H = compact ? Math.round(Number(host.dataset.height) * 0.82) : Number(host.dataset.height);
@@ -603,12 +636,121 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     return shrinks;
   }
 
+  function drawRatioChart(host, data, label) {
+    charts.set(host.id, { redraw: () => drawRatioChart(host, data, label) });
+    const W = Math.max(260, Math.floor(host.clientWidth));
+    const compact = W < 540;
+    const H = compact ? Math.round(Number(host.dataset.height) * 0.82) : Number(host.dataset.height);
+    const m = { l: compact ? 30 : 38, r: compact ? 40 : 48, t: 14, b: 28 };
+    const pw = W - m.l - m.r, ph = H - m.t - m.b, len = data.len, base = m.t + ph;
+    const finite = data.ratio.filter((v) => v != null);
+    const top = Math.max(1, ...finite, 0);
+    const step = niceStep(top, compact ? 3 : 4, 0.1);
+    const yMax = Math.ceil((top * 1.08) / step) * step;
+    const decimals = step < 1 ? 1 : 0;
+    const x = (i) => m.l + (len === 1 ? pw / 2 : (i * pw) / (len - 1));
+    const y = (v) => m.t + ph - (Math.min(v, yMax) / yMax) * ph;
+    const id = host.id;
+
+    let g = '';
+    for (let v = 0; v <= yMax + 1e-9; v += step) {
+      const yy = y(v).toFixed(1);
+      g += `<line class="grid" x1="${m.l}" x2="${m.l + pw}" y1="${yy}" y2="${yy}"/>`;
+      g += `<text class="tick" x="${m.l - 8}" y="${yy}" dy="0.32em" text-anchor="end">${v.toFixed(decimals)}</text>`;
+    }
+    for (const i of xTicks(len, pw)) {
+      g += `<text class="tick" x="${x(i).toFixed(1)}" y="${base + 20}" text-anchor="middle">${esc(dayLabel(data.start + i))}</text>`;
+    }
+    const refY = y(1).toFixed(1);
+    const ref = `<line class="ref" x1="${m.l}" x2="${m.l + pw}" y1="${refY}" y2="${refY}"/>
+      <text class="tick ref-label" x="${(m.l + pw + 6).toFixed(1)}" y="${refY}" dy="0.32em">1.0</text>`;
+
+    const segs = [];
+    let cur = [];
+    for (let i = 0; i < len; i++) {
+      if (data.ratio[i] != null) cur.push(i); else { if (cur.length) segs.push(cur); cur = []; }
+    }
+    if (cur.length) segs.push(cur);
+    let lines = '';
+    for (const seg of segs) {
+      if (seg.length === 1) {
+        const i = seg[0];
+        lines += `<circle class="dot-ratio" cx="${x(i).toFixed(2)}" cy="${y(data.ratio[i]).toFixed(2)}" r="4"/>`;
+      } else {
+        const xs = seg.map(x), ys = seg.map((i) => y(data.ratio[i]));
+        lines += `<path class="l-ratio" d="${curves(xs, ys).fwd}"/>`;
+      }
+    }
+    const lastIdx = [...Array(len).keys()].reverse().find((i) => data.ratio[i] != null);
+    if (lastIdx != null) {
+      const cy = y(data.ratio[lastIdx]), text = data.ratio[lastIdx].toFixed(2);
+      const w = text.length * 7.9 + 14;
+      const px = Math.min(W - w - 1, x(lastIdx) + 9);
+      lines += `<circle class="dot-ratio" cx="${x(lastIdx).toFixed(2)}" cy="${cy.toFixed(2)}" r="4.5"/>
+        <g class="pill pill-ratio"><rect x="${px.toFixed(1)}" y="${(cy - 11).toFixed(1)}" width="${w.toFixed(1)}" height="22" rx="6"/>
+        <text x="${(px + w / 2).toFixed(1)}" y="${cy.toFixed(1)}" dy="0.34em" text-anchor="middle">${esc(text)}</text></g>`;
+    }
+
+    const hover = `<g class="hover" visibility="hidden">
+        <line class="xhair" y1="${m.t}" y2="${base}"/>
+        <circle class="dot-ratio hr" r="4"/>
+      </g>
+      <rect class="hit" x="${m.l - 6}" y="${m.t}" width="${pw + 12}" height="${ph}"/>`;
+
+    const aria = `${label} filed per cleared, trailing ${data.window}-day window, ${dayLabel(data.start)} to ${dayLabel(data.start + len - 1)}.`;
+    host.setAttribute('role', 'img');
+    host.setAttribute('aria-label', aria + ' Use the arrow keys to read individual days.');
+    host.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">${g}${ref}${lines}${hover}</svg><div class="tip" hidden></div>`;
+
+    const svg = host.querySelector('svg'), hv = svg.querySelector('.hover'), tip = host.querySelector('.tip');
+    const xh = hv.querySelector('.xhair'), hr = hv.querySelector('.hr');
+    let curI = -1;
+    const show = (i) => {
+      curI = Math.max(0, Math.min(len - 1, i));
+      const px = x(curI), v = data.ratio[curI];
+      xh.setAttribute('x1', px); xh.setAttribute('x2', px);
+      hr.setAttribute('visibility', v != null ? 'visible' : 'hidden');
+      if (v != null) { hr.setAttribute('cx', px); hr.setAttribute('cy', y(v)); }
+      hv.setAttribute('visibility', 'visible');
+      const f = data.filed[curI], c = data.cleared[curI];
+      tip.innerHTML = `<b>${esc(dayLabel(data.start + curI, { weekday: 'short' }))}</b><table>
+        <tr class="k-new"><td>Filed</td><td>${n(f)}</td></tr>
+        <tr class="k-clr"><td>Cleared</td><td>${n(c)}</td></tr>
+        <tr class="k-net"><td>Ratio</td><td>${v != null ? v.toFixed(2) : '—'}</td></tr></table>
+        <p style="margin:4px 0 0;color:var(--muted);font-size:12px">Trailing ${data.window} days ending this day${v == null ? ', none cleared' : ''}.</p>`;
+      tip.hidden = false;
+      const tw = tip.offsetWidth, th = tip.offsetHeight;
+      let left = px + 14;
+      if (left + tw > W) left = px - tw - 14;
+      tip.style.left = Math.max(0, left) + 'px';
+      tip.style.top = Math.max(0, Math.min(H - th, (v != null ? y(v) : base) - th / 2)) + 'px';
+    };
+    const hide = () => { hv.setAttribute('visibility', 'hidden'); tip.hidden = true; curI = -1; };
+    const fromEvent = (e) => {
+      const r = svg.getBoundingClientRect();
+      const px = ((e.clientX - r.left) * W) / r.width;
+      return len === 1 ? 0 : Math.round(((px - m.l) / pw) * (len - 1));
+    };
+    const hit = svg.querySelector('.hit');
+    hit.addEventListener('pointermove', (e) => show(fromEvent(e)));
+    hit.addEventListener('pointerdown', (e) => show(fromEvent(e)));
+    hit.addEventListener('pointerleave', hide);
+    host.onkeydown = (e) => {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        show((curI < 0 ? len - 1 : curI) + (e.key === 'ArrowLeft' ? -1 : 1));
+      } else if (e.key === 'Escape') hide();
+    };
+    host.onfocus = () => show(lastIdx != null ? lastIdx : len - 1);
+    host.onblur = hide;
+  }
+
   const ro = new ResizeObserver((entries) => {
     for (const e of entries) {
       const c = charts.get(e.target.id);
       if (c && Math.abs(e.contentRect.width - (e.target._w || 0)) > 2) {
         e.target._w = e.contentRect.width;
-        requestAnimationFrame(() => drawChart(e.target, c.agg, c.label));
+        requestAnimationFrame(() => c.redraw());
       }
     }
   });
@@ -664,19 +806,22 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       <span><i class="sw" style="background:var(--cleared)"></i>Cleared</span>
       <span><i class="sw box" style="background:var(--gap-fill)"></i>Net queue growth</span>
       ${shrinks ? '<span><i class="sw box" style="background:var(--shrink-fill)"></i>Net queue shrink</span>' : ''}`;
+    drawRatioChart($('chart-all-ratio'), rollingRatio(items, b.start, b.end), 'Total queue');
     for (const code of ['p', 'w']) {
       const sub = items.filter((it) => it.lane === code);
       const agg = aggregate(sub, b.start, b.end);
       $('sub-' + code).textContent = `${n(agg.added)} new, ${n(agg.cleared)} cleared, ${n(agg.open)} open`;
       $('ratio-' + code).innerHTML = ratioText(lastWeek(sub, b.end));
       drawChart($('chart-' + code), agg, LANE_NAME[code] + ' lane');
+      drawRatioChart($('chart-' + code + '-ratio'), rollingRatio(sub, b.start, b.end), LANE_NAME[code] + ' lane');
     }
     const also = ['c', 'u'].map((code) => {
       const agg = aggregate(items.filter((it) => it.lane === code), b.start, b.end);
       return `${LANE_NAME[code].toLowerCase()} ${n(agg.added)} new, ${n(agg.cleared)} cleared, ${n(agg.open)} open`;
     });
     $('also').textContent = `Also in the total: ${also.join('; ')}. Crossing items touch both halves; unplaced items declare no touches.`;
-    ['chart-all', 'chart-p', 'chart-w'].forEach((id) => { const el = $(id); el._w = el.clientWidth; ro.observe(el); });
+    ['chart-all', 'chart-p', 'chart-w', 'chart-all-ratio', 'chart-p-ratio', 'chart-w-ratio']
+      .forEach((id) => { const el = $(id); el._w = el.clientWidth; ro.observe(el); });
   }
 
   function branchRows() {
