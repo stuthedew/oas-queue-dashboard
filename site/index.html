@@ -1,0 +1,928 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>OAS queue dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&display=swap">
+<style>
+:root {
+  --paper: #ffffff; --panel: #f5f7fa; --ink: #1d2430; --ink-2: #46505f; --muted: #5f6b7e;
+  --rule: #e2e7ee; --grid: #e4e8ee;
+  --new: #d0611d; --new-ink: #a84a0c; --new-tint: #fdf0e6; --gap-fill: rgba(208, 97, 29, 0.17);
+  --cleared: #3b8a3e; --cleared-ink: #2b6c2e; --cleared-tint: #ecf5e9;
+  --under-fill: rgba(59, 138, 62, 0.10); --shrink-fill: rgba(59, 138, 62, 0.30);
+  --open: #1d62a8; --open-ink: #1a5794; --open-tint: #e9f1fa;
+  --warn: #8a5500; --warn-tint: #fff4dc; --chip: #e9edf3;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  color-scheme: light;
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #111418; --panel: #191d23; --ink: #e8ecf1; --ink-2: #b9c2cf; --muted: #8f9bae;
+    --rule: #29303a; --grid: #262c35;
+    --new: #f0894a; --new-ink: #f6a877; --new-tint: #2a1d15; --gap-fill: rgba(240, 137, 74, 0.20);
+    --cleared: #69b96c; --cleared-ink: #92d294; --cleared-tint: #17241a;
+    --under-fill: rgba(105, 185, 108, 0.12); --shrink-fill: rgba(105, 185, 108, 0.32);
+    --open: #71a7e6; --open-ink: #98c1f1; --open-tint: #152233;
+    --warn: #f0b64a; --warn-tint: #2d2412; --chip: #232932;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #111418; --panel: #191d23; --ink: #e8ecf1; --ink-2: #b9c2cf; --muted: #8f9bae;
+  --rule: #29303a; --grid: #262c35;
+  --new: #f0894a; --new-ink: #f6a877; --new-tint: #2a1d15; --gap-fill: rgba(240, 137, 74, 0.20);
+  --cleared: #69b96c; --cleared-ink: #92d294; --cleared-tint: #17241a;
+  --under-fill: rgba(105, 185, 108, 0.12); --shrink-fill: rgba(105, 185, 108, 0.32);
+  --open: #71a7e6; --open-ink: #98c1f1; --open-tint: #152233;
+  --warn: #f0b64a; --warn-tint: #2d2412; --chip: #232932;
+  color-scheme: dark;
+}
+html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+[hidden] { display: none !important; }
+*, *::before, *::after { box-sizing: inherit; }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font-family: "Public Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1160px; margin: 0 auto; padding: 28px max(20px, env(safe-area-inset-right, 0px)) 56px max(20px, env(safe-area-inset-left, 0px)); }
+h1, h2, h3 { margin: 0; font-weight: 800; letter-spacing: -0.01em; }
+p { margin: 0; }
+a { color: inherit; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--open); outline-offset: 2px; border-radius: 4px; }
+.num { font-variant-numeric: tabular-nums; }
+.id, code, .mono { font-family: var(--mono); font-size: 0.86em; }
+
+/* Header */
+.head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px 24px; margin-bottom: 22px; }
+.head h1 { font-size: clamp(28px, 4.2vw, 44px); line-height: 1.05; }
+.head .sub { color: var(--ink-2); font-size: 16px; margin-top: 6px; }
+.head .src { color: var(--muted); font-size: 13.5px; margin-top: 4px; }
+.head .src a { color: var(--muted); }
+.stale { color: var(--warn); font-weight: 600; }
+.range { display: inline-flex; background: var(--panel); border-radius: 10px; padding: 3px; gap: 2px; }
+.range button { border: 0; background: transparent; padding: 7px 12px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--ink-2); }
+.range button[aria-pressed="true"] { background: var(--paper); color: var(--ink); box-shadow: 0 0 0 1px var(--rule); }
+
+.banner { border-radius: 12px; padding: 12px 16px; margin: 0 0 18px; background: var(--warn-tint); color: var(--ink); display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+.banner strong { color: var(--warn); }
+
+/* KPIs */
+.kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 18px; }
+.kpi { border-radius: 18px; padding: 22px 20px 20px; text-align: center; min-width: 0; }
+.kpi-num { font-size: clamp(34px, 6vw, 64px); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.kpi-label { font-size: 16px; font-weight: 700; margin-top: 10px; }
+.kpi-note { font-size: 13px; margin-top: 4px; opacity: 0.92; }
+.kpi.new { background: var(--new-tint); color: var(--new-ink); }
+.kpi.clr { background: var(--cleared-tint); color: var(--cleared-ink); }
+.kpi.opn { background: var(--open-tint); color: var(--open-ink); }
+
+/* Panels */
+.panel { background: var(--panel); border-radius: 18px; padding: 22px 24px 18px; margin-bottom: 18px; min-width: 0; }
+.panel h2 { font-size: 22px; }
+.panel-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 8px 20px; margin-bottom: 10px; }
+.panel-sub { color: var(--muted); font-size: 14px; margin-top: 3px; max-width: 70ch; }
+.ratio { font-size: 13.5px; color: var(--ink-2); text-align: right; }
+.ratio b { font-weight: 700; color: var(--ink); }
+.lanes { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.lanes .panel { margin-bottom: 0; }
+.lane .ratio { text-align: left; margin-top: 2px; }
+.also { color: var(--muted); font-size: 13.5px; margin: 10px 4px 22px; }
+
+/* Charts */
+.chart { position: relative; width: 100%; outline: none; }
+.chart svg { display: block; overflow: visible; }
+.chart .grid { stroke: var(--grid); stroke-width: 1; }
+.chart .tick { fill: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.chart .l-new { fill: none; stroke: var(--new); stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
+.chart .l-clr { fill: none; stroke: var(--cleared); stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
+.chart .f-under { fill: var(--under-fill); }
+.chart .f-gap { fill: var(--gap-fill); }
+.chart .f-shrink { fill: var(--shrink-fill); }
+.chart .dot-new { fill: var(--new); } .chart .dot-clr { fill: var(--cleared); }
+.chart .pill-new rect { fill: var(--new-tint); } .chart .pill-new text { fill: var(--new-ink); }
+.chart .pill-clr rect { fill: var(--cleared-tint); } .chart .pill-clr text { fill: var(--cleared-ink); }
+.chart .pill text { font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums; }
+.chart .xhair { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 3 3; }
+.chart .hit { fill: transparent; cursor: crosshair; }
+.tip { position: absolute; pointer-events: none; background: var(--paper); color: var(--ink); border: 1px solid var(--rule); border-radius: 10px; padding: 8px 10px; font-size: 13px; line-height: 1.4; min-width: 176px; z-index: 2; }
+.tip b { display: block; margin-bottom: 3px; }
+.tip table { border-collapse: collapse; width: 100%; }
+.tip td { padding: 0 0 0 8px; text-align: right; font-variant-numeric: tabular-nums; }
+.tip td:first-child { padding-left: 0; text-align: left; }
+.tip .k-new { color: var(--new-ink); } .tip .k-clr { color: var(--cleared-ink); }
+.tip .k-net td { border-top: 1px solid var(--rule); padding-top: 3px; }
+.tip .k-net td + td { font-weight: 700; }
+.tip .up { color: var(--new-ink); } .tip .down { color: var(--cleared-ink); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 20px; color: var(--muted); font-size: 13.5px; margin-top: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.sw { display: inline-block; width: 22px; height: 4px; border-radius: 2px; }
+.sw.box { height: 12px; width: 18px; border-radius: 3px; }
+
+/* Tables */
+.table-scroll { overflow-x: auto; margin: 0 -4px; }
+table.t { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.t th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12.5px; padding: 6px 10px 6px 4px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+table.t td { padding: 9px 10px 9px 4px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+table.t tr:last-child td { border-bottom: 0; }
+.chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12.5px; font-weight: 600; white-space: nowrap; background: var(--chip); color: var(--ink-2); }
+.chip.flight { background: var(--open-tint); color: var(--open-ink); }
+.chip.stranded { background: var(--warn-tint); color: var(--warn); }
+.tag { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.idlink { font-family: var(--mono); font-size: 12.5px; text-decoration: none; background: var(--chip); padding: 1px 6px; border-radius: 5px; white-space: nowrap; }
+.idlink:hover { text-decoration: underline; }
+.ids { display: flex; flex-wrap: wrap; gap: 4px; }
+.subj { color: var(--muted); font-size: 13px; margin-top: 3px; max-width: 58ch; }
+.branch { font-family: var(--mono); font-size: 13px; white-space: nowrap; }
+.title-cell { max-width: 62ch; }
+.title-cell .t { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.empty-row td { color: var(--muted); }
+details { margin-top: 12px; }
+summary { cursor: pointer; color: var(--ink-2); font-size: 14px; font-weight: 600; }
+pre { white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 12.5px; line-height: 1.5; background: var(--paper); border-radius: 10px; padding: 12px 14px; margin: 10px 0 0; color: var(--ink-2); max-height: 420px; overflow: auto; }
+
+/* Composition */
+.comp { display: grid; gap: 16px; }
+.comp-row h3 { font-size: 14px; font-weight: 700; color: var(--ink-2); margin-bottom: 6px; }
+.bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; gap: 2px; background: var(--paper); }
+.bar i { display: block; height: 100%; background: var(--open); }
+.comp-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; font-size: 13.5px; color: var(--ink-2); }
+.comp-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.comp-legend i { width: 10px; height: 10px; border-radius: 3px; background: var(--open); display: inline-block; }
+
+/* Item list controls */
+.controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin: 4px 0 12px; }
+.seg { display: inline-flex; background: var(--paper); border-radius: 10px; padding: 3px; gap: 2px; }
+.seg button { border: 0; background: transparent; padding: 6px 11px; border-radius: 8px; cursor: pointer; font-size: 13.5px; font-weight: 600; color: var(--ink-2); }
+.seg button[aria-pressed="true"] { background: var(--panel); color: var(--ink); box-shadow: 0 0 0 1px var(--rule); }
+select, input[type="search"] { font: inherit; font-size: 14px; color: var(--ink); background: var(--paper); border: 1px solid var(--rule); border-radius: 9px; padding: 6px 10px; }
+input[type="search"] { min-width: 220px; flex: 1 1 220px; max-width: 360px; }
+.more { margin-top: 10px; }
+.btn { border: 1px solid var(--rule); background: var(--paper); border-radius: 9px; padding: 7px 12px; cursor: pointer; font-size: 14px; font-weight: 600; }
+.btn:hover { border-color: var(--muted); }
+a.btn { display: inline-block; text-decoration: none; color: var(--ink); }
+
+/* Footer */
+.notes { color: var(--muted); font-size: 13.5px; display: grid; gap: 8px; margin-top: 6px; }
+.notes .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 2px; }
+.notes .check-ok { color: var(--cleared-ink); }
+.notes .check-bad { color: var(--warn); font-weight: 600; }
+textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); font-size: 12.5px; background: var(--paper); color: var(--ink); border: 1px solid var(--rule); border-radius: 10px; padding: 10px; }
+.state { padding: 48px 8px; text-align: center; color: var(--ink-2); }
+.state p + p { margin-top: 10px; }
+.state .btn { margin-top: 16px; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+@media (max-width: 760px) {
+  .lanes { grid-template-columns: 1fr; gap: 14px; }
+  .panel { padding: 18px 16px 14px; border-radius: 16px; }
+  .kpis { gap: 10px; }
+  .kpi { padding: 16px 10px 14px; border-radius: 14px; }
+  .kpi-label { font-size: 14px; margin-top: 6px; }
+  .kpi-note { font-size: 12px; }
+}
+@media (max-width: 640px) {
+  table.stack thead { display: none; }
+  table.stack, table.stack tbody, table.stack tr, table.stack td { display: block; width: 100%; }
+  table.stack tr { padding: 10px 0; border-bottom: 1px solid var(--rule); }
+  table.stack tr:last-child { border-bottom: 0; }
+  table.stack td { border: 0; padding: 2px 0; white-space: normal !important; max-width: none; }
+  table.stack td[data-label]::before { content: attr(data-label) " "; color: var(--muted); font-size: 12.5px; margin-right: 4px; }
+  .table-scroll { margin: 0; }
+}
+@media (max-width: 520px) {
+  .kpis { grid-template-columns: 1fr; }
+  .kpi { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 0 16px; text-align: left; padding: 14px 16px; }
+  .kpi-num { grid-row: span 2; font-size: 40px; }
+  .kpi-label { margin-top: 0; }
+  .ratio { text-align: left; }
+  .range button { padding: 7px 9px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .kpi-num, .panel { transition: opacity 0.2s ease; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="head">
+    <div>
+      <h1 id="title">Queue report</h1>
+      <p class="sub" id="subtitle">Open Anesthesia Sim</p>
+      <p class="src" id="source">Reading the latest snapshot</p>
+    </div>
+    <div class="range" role="group" aria-label="Date range">
+      <button type="button" data-range="7" aria-pressed="false">7 days</button>
+      <button type="button" data-range="14" aria-pressed="false">14 days</button>
+      <button type="button" data-range="30" aria-pressed="false">30 days</button>
+      <button type="button" data-range="all" aria-pressed="false">All</button>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+  <div id="state" class="state" hidden></div>
+
+  <main id="dash" hidden>
+    <section class="kpis" aria-label="Headline counts for the selected range">
+      <div class="kpi new"><div class="kpi-num" id="k-new">0</div><div class="kpi-label">New items</div><div class="kpi-note num" id="k-new-note"></div></div>
+      <div class="kpi clr"><div class="kpi-num" id="k-clr">0</div><div class="kpi-label">Cleared</div><div class="kpi-note num" id="k-clr-note"></div></div>
+      <div class="kpi opn"><div class="kpi-num" id="k-open">0</div><div class="kpi-label">Open now</div><div class="kpi-note num" id="k-open-note"></div></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Total queue activity</h2>
+          <p class="panel-sub">Cumulative additions against clearances over the range. The shaded gap between the lines is net queue growth.</p>
+        </div>
+        <p class="ratio" id="ratio-all"></p>
+      </div>
+      <div class="chart" id="chart-all" data-height="330" tabindex="0"></div>
+      <div class="legend" id="legend-all"></div>
+    </section>
+
+    <div class="lanes">
+      <section class="panel lane">
+        <h2>Product lane</h2>
+        <p class="panel-sub num" id="sub-p"></p>
+        <p class="ratio" id="ratio-p"></p>
+        <div class="chart" id="chart-p" data-height="230" tabindex="0"></div>
+      </section>
+      <section class="panel lane">
+        <h2>Workflow lane</h2>
+        <p class="panel-sub num" id="sub-w"></p>
+        <p class="ratio" id="ratio-w"></p>
+        <div class="chart" id="chart-w" data-height="230" tabindex="0"></div>
+      </section>
+    </div>
+    <p class="also num" id="also"></p>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Sessions in flight</h2>
+          <p class="panel-sub num" id="flight-sub"></p>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table class="t stack" id="branches">
+          <thead><tr><th>Branch</th><th>Docket reading</th><th>Items</th><th>Last commit</th><th>vs main</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="panel-sub" style="margin-top:10px">Every branch on GitHub other than main, read by docket's own <code>bin/docket flight</code> and <code>stranded</code> at this snapshot. A live session and an abandoned branch read the same; the age tells them apart.</p>
+      <details><summary>What a session sees at start (docket digest)</summary><pre id="digest"></pre></details>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>What is open</h2>
+          <p class="panel-sub num" id="comp-sub"></p>
+        </div>
+      </div>
+      <div class="comp" id="comp"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Items</h2>
+          <p class="panel-sub" id="list-sub"></p>
+        </div>
+      </div>
+      <div class="controls">
+        <div class="seg" role="group" aria-label="Which items">
+          <button type="button" data-list="added" aria-pressed="true">Added</button>
+          <button type="button" data-list="cleared" aria-pressed="false">Cleared</button>
+          <button type="button" data-list="open" aria-pressed="false">Open now</button>
+        </div>
+        <label class="vh" for="lane-filter">Lane</label>
+        <select id="lane-filter">
+          <option value="all">All lanes</option>
+          <option value="p">Product</option>
+          <option value="w">Workflow</option>
+          <option value="c">Crossing</option>
+          <option value="u">Unplaced</option>
+        </select>
+        <label class="vh" for="q">Filter by id, title or feature</label>
+        <input type="search" id="q" placeholder="Filter by id, title or feature" autocomplete="off">
+      </div>
+      <div class="table-scroll">
+        <table class="t stack" id="items">
+          <thead><tr><th id="date-col">Added</th><th>Item</th><th>Lane</th><th>State</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="more"><button type="button" class="btn" id="more" hidden>Show all</button></div>
+    </section>
+
+    <footer class="notes">
+      <p>Cleared means done plus dropped, counted on the item's <code>closed:</code> date. New counts items by their <code>added:</code> date; items without one (the earliest, pre-field items) are carried in, not counted as new. Open is untriaged, ready, needs-decision or blocked. Lanes use each item's current <code>touches:</code> against <code>docket.toml</code> <code>workflow_paths</code>, the same test <code>docket next</code> uses; the total also includes crossing and unplaced items. Dates are as written in the item files, and the last day is partial.</p>
+      <p id="foot-source"></p>
+      <p id="foot-check"></p>
+      <div class="actions">
+        <button type="button" class="btn" id="copy-summary">Copy summary for a session</button>
+        <a class="btn" id="run-now" href="#" target="_blank" rel="noopener noreferrer" hidden>Run a refresh now on GitHub</a>
+      </div>
+      <textarea class="copybox" id="copybox" readonly hidden aria-label="Text to copy"></textarea>
+    </footer>
+  </main>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const OPEN = ['untriaged', 'ready', 'needs-decision', 'blocked'];
+  const CLOSED = ['done', 'dropped'];
+  const LANE_NAME = { p: 'Product', w: 'Workflow', c: 'Crossing', u: 'Unplaced' };
+  const DAY = 86400000;
+  const $ = (id) => document.getElementById(id);
+  const fmt = new Intl.NumberFormat('en-US');
+  const n = (x) => fmt.format(x);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const signed = (v) => (v > 0 ? '+' : v < 0 ? '\u2212' : '') + n(Math.abs(v));
+  const trend = (v) => (v > 0 ? 'up' : v < 0 ? 'down' : '');
+  const dayOf = (iso) => {
+    if (!iso) return null;
+    const [y, m, d] = iso.split('-').map(Number);
+    return Math.round(Date.UTC(y, m - 1, d) / DAY);
+  };
+  const dayLabel = (dn, opts) => new Date(dn * DAY).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC', ...(opts || {}) });
+  const pref = {
+    get(k, d) { try { return localStorage.getItem('oasq.' + k) || d; } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem('oasq.' + k, v); } catch (e) { /* storage unavailable */ } },
+  };
+  const ago = (ms) => {
+    const s = Math.max(0, (Date.now() - ms) / 1000);
+    if (s < 90) return 'just now';
+    if (s < 3600) return Math.round(s / 60) + ' min ago';
+    if (s < 48 * 3600) return Math.round(s / 3600) + ' h ago';
+    return Math.round(s / 86400) + ' d ago';
+  };
+  const clock = (ms) => new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+
+  const state = {
+    meta: null, items: [], byId: new Map(),
+    range: pref.get('range', 'all'), list: 'added', lane: 'all', query: '', showAll: false,
+  };
+
+  /* ---------- data ---------- */
+  function assemble(snap) {
+    const meta = snap.meta || {};
+    const at = Object.fromEntries((meta.item_columns || []).map((c, i) => [c, i]));
+    const items = (snap.rows || []).map((r) => ({
+      id: r[at.id], title: r[at.title], status: r[at.status], priority: r[at.priority],
+      effort: r[at.effort], lane: r[at.lane], addedIso: r[at.added], closedIso: r[at.closed],
+      added: dayOf(r[at.added]), closed: dayOf(r[at.closed]), classes: r[at.classes] || [],
+      feature: r[at.feature], pr: r[at.pr], file: r[at.file],
+    }));
+    return { meta, items };
+  }
+
+  function bounds() {
+    let first = Infinity, last = -Infinity;
+    for (const it of state.items) {
+      if (it.added != null) { first = Math.min(first, it.added); last = Math.max(last, it.added); }
+      if (it.closed != null) last = Math.max(last, it.closed);
+    }
+    last = Math.max(last, Math.floor(Date.parse(state.meta.generated_at) / DAY));
+    if (!isFinite(first)) first = last;
+    const span = state.range === 'all' ? Infinity : Number(state.range);
+    const start = span === Infinity ? first : Math.max(first, last - span + 1);
+    return { first, start, end: last };
+  }
+
+  function aggregate(items, start, end) {
+    const len = end - start + 1;
+    const dayNew = new Array(len).fill(0), dayClr = new Array(len).fill(0);
+    let added = 0, cleared = 0, done = 0, dropped = 0, open = 0, carried = 0;
+    for (const it of items) {
+      const isOpen = OPEN.includes(it.status), isClosed = CLOSED.includes(it.status);
+      if (it.added != null && it.added >= start && it.added <= end) { dayNew[it.added - start]++; added++; }
+      if (isClosed && it.closed != null && it.closed >= start && it.closed <= end) {
+        dayClr[it.closed - start]++; cleared++;
+        if (it.status === 'done') done++; else dropped++;
+      }
+      if (isOpen) open++;
+      const existedBefore = it.added == null || it.added < start;
+      if (existedBefore && (isOpen || (isClosed && it.closed != null && it.closed >= start))) carried++;
+    }
+    const cumNew = [], cumClr = [];
+    let a = 0, c = 0;
+    for (let i = 0; i < len; i++) { a += dayNew[i]; c += dayClr[i]; cumNew.push(a); cumClr.push(c); }
+    return { len, start, dayNew, dayClr, cumNew, cumClr, added, cleared, done, dropped, open, carried };
+  }
+
+  function lastWeek(items, end) {
+    const s = end - 6;
+    let f = 0, c = 0;
+    for (const it of items) {
+      if (it.added != null && it.added >= s && it.added <= end) f++;
+      if (CLOSED.includes(it.status) && it.closed != null && it.closed >= s && it.closed <= end) c++;
+    }
+    return { f, c, ratio: c ? f / c : null };
+  }
+
+  const ratioText = (w) => w.c
+    ? `Last 7 days: <b class="num">${n(w.f)}</b> filed, <b class="num">${n(w.c)}</b> cleared, <b class="num">${(w.ratio).toFixed(2)}</b> filed per cleared`
+    : `Last 7 days: <b class="num">${n(w.f)}</b> filed, none cleared`;
+
+  /* ---------- chart ---------- */
+  function niceStep(max, count) {
+    const raw = max / count;
+    const p = Math.pow(10, Math.floor(Math.log10(raw)));
+    const ks = p < 10 ? [1, 2, 5, 10] : [1, 2, 2.5, 5, 10];
+    for (const k of ks) if (k * p >= raw) return Math.max(1, k * p);
+    return Math.max(1, 10 * p);
+  }
+
+  function tangents(xs, ys) {
+    const len = xs.length, t = new Array(len).fill(0);
+    if (len < 2) return t;
+    const h = [], s = [];
+    for (let i = 0; i < len - 1; i++) { h.push(xs[i + 1] - xs[i]); s.push((ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i])); }
+    for (let i = 1; i < len - 1; i++) {
+      const p = (s[i - 1] * h[i] + s[i] * h[i - 1]) / (h[i - 1] + h[i]);
+      const sg = (v) => (v < 0 ? -1 : 1);
+      t[i] = (sg(s[i - 1]) + sg(s[i])) * Math.min(Math.abs(s[i - 1]), Math.abs(s[i]), 0.5 * Math.abs(p)) || 0;
+    }
+    const edge = (sec, inner) => {
+      let v = (3 * sec - inner) / 2;
+      if (sec === 0) return 0;
+      if (Math.sign(v) !== Math.sign(sec)) v = 0;
+      if (Math.abs(v) > 3 * Math.abs(sec)) v = 3 * sec;
+      return v;
+    };
+    t[0] = len === 2 ? s[0] : edge(s[0], t[1]);
+    t[len - 1] = len === 2 ? s[0] : edge(s[len - 2], t[len - 2]);
+    return t;
+  }
+
+  function curves(xs, ys) {
+    const t = tangents(xs, ys), len = xs.length, f = (v) => v.toFixed(2);
+    let fwd = `M${f(xs[0])},${f(ys[0])}`, back = '';
+    for (let i = 0; i < len - 1; i++) {
+      const h = xs[i + 1] - xs[i];
+      const c1 = [xs[i] + h / 3, ys[i] + (t[i] * h) / 3], c2 = [xs[i + 1] - h / 3, ys[i + 1] - (t[i + 1] * h) / 3];
+      fwd += `C${f(c1[0])},${f(c1[1])} ${f(c2[0])},${f(c2[1])} ${f(xs[i + 1])},${f(ys[i + 1])}`;
+      back = `C${f(c2[0])},${f(c2[1])} ${f(c1[0])},${f(c1[1])} ${f(xs[i])},${f(ys[i])}` + back;
+    }
+    return { fwd, back: `L${f(xs[len - 1])},${f(ys[len - 1])}` + back };
+  }
+
+  function xTicks(len, width) {
+    const max = Math.max(2, Math.floor(width / 92));
+    const steps = len > 14 ? [7, 14, 28, 56, 112] : [1, 2, 3, 7];
+    const step = steps.find((s) => Math.ceil(len / s) <= max) || Math.ceil(len / max);
+    const ticks = [];
+    for (let i = len - 1; i >= 0; i -= step) ticks.push(i);
+    ticks.reverse();
+    if (ticks[0] > 0 && (ticks[0] / Math.max(1, len - 1)) * width >= 72) ticks.unshift(0);
+    return ticks;
+  }
+
+  const charts = new Map();
+  function drawChart(host, agg, label) {
+    charts.set(host.id, { agg, label });
+    const W = Math.max(260, Math.floor(host.clientWidth));
+    const compact = W < 540;
+    const H = compact ? Math.round(Number(host.dataset.height) * 0.82) : Number(host.dataset.height);
+    const m = { l: compact ? 34 : 44, r: compact ? 50 : 62, t: 14, b: 28 };
+    const pw = W - m.l - m.r, ph = H - m.t - m.b, len = agg.len, base = m.t + ph;
+    const top = Math.max(agg.cumNew[len - 1], agg.cumClr[len - 1], 1);
+    const step = niceStep(top, compact ? 3 : 4);
+    const yMax = Math.ceil((top * 1.08) / step) * step;
+    const x = (i) => m.l + (len === 1 ? pw / 2 : (i * pw) / (len - 1));
+    const y = (v) => m.t + ph - (v / yMax) * ph;
+    const xs = agg.cumNew.map((_, i) => x(i));
+    const yn = agg.cumNew.map(y), yc = agg.cumClr.map(y);
+    const N = curves(xs, yn), C = curves(xs, yc);
+    const id = host.id;
+    const L = xs[0].toFixed(2), R = xs[len - 1].toFixed(2), T = (m.t - 40).toFixed(2);
+    const shrinks = agg.cumClr.some((v, i) => v > agg.cumNew[i]);
+
+    let g = '';
+    for (let v = 0; v <= yMax + 1e-9; v += step) {
+      const yy = y(v).toFixed(1);
+      g += `<line class="grid" x1="${m.l}" x2="${m.l + pw}" y1="${yy}" y2="${yy}"/>`;
+      g += `<text class="tick" x="${m.l - 8}" y="${yy}" dy="0.32em" text-anchor="end">${n(v)}</text>`;
+    }
+    for (const i of xTicks(len, pw)) {
+      g += `<text class="tick" x="${x(i).toFixed(1)}" y="${base + 20}" text-anchor="middle">${esc(dayLabel(agg.start + i))}</text>`;
+    }
+    const clip = `<defs>
+      <clipPath id="${id}-aboveC"><path d="${C.fwd}L${R},${T}L${L},${T}Z"/></clipPath>
+      <clipPath id="${id}-aboveN"><path d="${N.fwd}L${R},${T}L${L},${T}Z"/></clipPath>
+    </defs>`;
+    const band = `${N.fwd}${C.back}Z`;
+    const fills = `<path class="f-under" d="${C.fwd}L${R},${base}L${L},${base}Z"/>
+      <path class="f-gap" d="${band}" clip-path="url(#${id}-aboveC)"/>
+      ${shrinks ? `<path class="f-shrink" d="${band}" clip-path="url(#${id}-aboveN)"/>` : ''}`;
+    const lines = `<path class="l-clr" d="${C.fwd}"/><path class="l-new" d="${N.fwd}"/>
+      <circle class="dot-clr" cx="${R}" cy="${yc[len - 1].toFixed(2)}" r="4.5"/>
+      <circle class="dot-new" cx="${R}" cy="${yn[len - 1].toFixed(2)}" r="4.5"/>`;
+
+    const pill = (cls, text, cy) => {
+      const w = String(text).length * 7.9 + 14;
+      const px = Math.min(W - w - 1, xs[len - 1] + 9);
+      return `<g class="pill ${cls}"><rect x="${px.toFixed(1)}" y="${(cy - 11).toFixed(1)}" width="${w.toFixed(1)}" height="22" rx="6"/>
+        <text x="${(px + w / 2).toFixed(1)}" y="${cy.toFixed(1)}" dy="0.34em" text-anchor="middle">${esc(text)}</text></g>`;
+    };
+    let ny = yn[len - 1], cy = yc[len - 1];
+    const newOnTop = agg.cumNew[len - 1] >= agg.cumClr[len - 1];
+    let upper = newOnTop ? ny : cy, lower = newOnTop ? cy : ny;
+    if (lower - upper < 26) { const mid = (upper + lower) / 2; upper = mid - 13; lower = mid + 13; }
+    upper -= 16; lower += 16;
+    upper = Math.max(m.t + 2, upper); lower = Math.min(base - 2, lower);
+    if (newOnTop) { ny = upper; cy = lower; } else { ny = lower; cy = upper; }
+    const pills = pill('pill-new', n(agg.cumNew[len - 1]), ny) + pill('pill-clr', n(agg.cumClr[len - 1]), cy);
+
+    const hover = `<g class="hover" visibility="hidden">
+        <line class="xhair" y1="${m.t}" y2="${base}"/>
+        <circle class="dot-clr hc" r="4"/><circle class="dot-new hn" r="4"/>
+      </g>
+      <rect class="hit" x="${m.l - 6}" y="${m.t}" width="${pw + 12}" height="${ph}"/>`;
+
+    const aria = `${label}: ${n(agg.added)} new and ${n(agg.cleared)} cleared from ${dayLabel(agg.start)} to ${dayLabel(agg.start + len - 1)}.`;
+    host.setAttribute('role', 'img');
+    host.setAttribute('aria-label', aria + ' Use the arrow keys to read individual days.');
+    host.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">${clip}${g}${fills}${lines}${pills}${hover}</svg><div class="tip" hidden></div>`;
+
+    const svg = host.querySelector('svg'), hv = svg.querySelector('.hover'), tip = host.querySelector('.tip');
+    const xh = hv.querySelector('.xhair'), hc = hv.querySelector('.hc'), hn = hv.querySelector('.hn');
+    let cur = -1;
+    const show = (i) => {
+      cur = Math.max(0, Math.min(len - 1, i));
+      const px = xs[cur];
+      xh.setAttribute('x1', px); xh.setAttribute('x2', px);
+      hc.setAttribute('cx', px); hc.setAttribute('cy', yc[cur]);
+      hn.setAttribute('cx', px); hn.setAttribute('cy', yn[cur]);
+      hv.setAttribute('visibility', 'visible');
+      const net = agg.cumNew[cur] - agg.cumClr[cur];
+      const delta = agg.dayNew[cur] - agg.dayClr[cur];
+      tip.innerHTML = `<b>${esc(dayLabel(agg.start + cur, { weekday: 'short' }))}</b><table>
+        <tr><td></td><td>that day</td><td>in range</td></tr>
+        <tr class="k-new"><td>New</td><td>${n(agg.dayNew[cur])}</td><td>${n(agg.cumNew[cur])}</td></tr>
+        <tr class="k-clr"><td>Cleared</td><td>${n(agg.dayClr[cur])}</td><td>${n(agg.cumClr[cur])}</td></tr>
+        <tr class="k-net"><td>Net</td><td class="${trend(delta)}">${signed(delta)}</td><td class="${trend(net)}">${signed(net)}</td></tr></table>`;
+      tip.hidden = false;
+      const tw = tip.offsetWidth, th = tip.offsetHeight;
+      let left = px + 14;
+      if (left + tw > W) left = px - tw - 14;
+      tip.style.left = Math.max(0, left) + 'px';
+      tip.style.top = Math.max(0, Math.min(H - th, Math.min(yn[cur], yc[cur]) - th / 2)) + 'px';
+    };
+    const hide = () => { hv.setAttribute('visibility', 'hidden'); tip.hidden = true; cur = -1; };
+    const fromEvent = (e) => {
+      const r = svg.getBoundingClientRect();
+      const px = ((e.clientX - r.left) * W) / r.width;
+      return len === 1 ? 0 : Math.round(((px - m.l) / pw) * (len - 1));
+    };
+    const hit = svg.querySelector('.hit');
+    hit.addEventListener('pointermove', (e) => show(fromEvent(e)));
+    hit.addEventListener('pointerdown', (e) => show(fromEvent(e)));
+    hit.addEventListener('pointerleave', hide);
+    host.onkeydown = (e) => {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        show((cur < 0 ? len - 1 : cur) + (e.key === 'ArrowLeft' ? -1 : 1));
+      } else if (e.key === 'Escape') hide();
+    };
+    host.onfocus = () => show(len - 1);
+    host.onblur = hide;
+    return shrinks;
+  }
+
+  const ro = new ResizeObserver((entries) => {
+    for (const e of entries) {
+      const c = charts.get(e.target.id);
+      if (c && Math.abs(e.contentRect.width - (e.target._w || 0)) > 2) {
+        e.target._w = e.contentRect.width;
+        requestAnimationFrame(() => drawChart(e.target, c.agg, c.label));
+      }
+    }
+  });
+
+  /* ---------- sections ---------- */
+  function workflowUrl() {
+    const m = state.meta;
+    return m && m.dashboard_repo ? `https://github.com/${m.dashboard_repo}/actions/workflows/${m.workflow_file || 'refresh.yml'}` : '';
+  }
+
+  function renderHeader(b) {
+    const { meta } = state;
+    const gen = Date.parse(meta.generated_at);
+    const every = Number(meta.interval_minutes) || 15;
+    $('title').textContent = 'Queue report for ' + new Date(gen).toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+    const long = { month: 'long', day: 'numeric' };
+    $('subtitle').textContent = `Open Anesthesia Sim, ${dayLabel(b.start, long)} to ${dayLabel(b.end, { ...long, year: 'numeric' })}`;
+    const stale = Date.now() - gen > Math.max(3 * every, 30) * 60000;
+    const missed = state.fetchError ? ` Could not check for newer data at ${esc(clock(state.lastCheck))}.` : '';
+    $('source').innerHTML = `main at <a class="mono" href="${esc(meta.repo_url)}/commit/${esc(meta.sha)}" target="_blank" rel="noopener noreferrer">${esc(meta.sha.slice(0, 7))}</a>, refreshed ${esc(clock(gen))} <span class="${stale ? 'stale' : ''}">(${esc(ago(gen))})</span>. Updates every ${every} minutes.${missed}`;
+    document.querySelectorAll('[data-range]').forEach((el) => el.setAttribute('aria-pressed', String(el.dataset.range === state.range)));
+    const problems = [];
+    const ck = meta.check || {};
+    const wf = workflowUrl();
+    if (stale) problems.push(`No refresh for ${esc(ago(gen).replace(' ago', ''))}, against a ${every}-minute schedule. GitHub runs schedules on a best-effort basis and switches them off after 60 days without repository activity.${wf ? ` <a href="${esc(wf)}" target="_blank" rel="noopener noreferrer">Check the workflow</a>.` : ''}`);
+    if (ck.docket_open != null && ck.docket_open !== ck.extractor_open) problems.push(`Open count differs from docket's own digest (${n(ck.extractor_open)} here, ${n(ck.docket_open)} in docket). The item format may have changed; extract.py needs a look.`);
+    if ((ck.unknown_statuses || []).length) problems.push(`Unrecognised statuses in the store: ${ck.unknown_statuses.map(esc).join(', ')}. Those items are counted neither open nor cleared.`);
+    const banner = $('banner');
+    banner.innerHTML = problems.length ? `<div><strong>Check this.</strong> ${problems.join(' ')}</div>` : '';
+    banner.hidden = !problems.length;
+  }
+
+  function renderKpis(all) {
+    const days = all.len;
+    $('k-new').textContent = n(all.added);
+    $('k-new-note').textContent = `${(all.added / days).toFixed(1)} a day over ${days} day${days === 1 ? '' : 's'}`;
+    $('k-clr').textContent = n(all.cleared);
+    $('k-clr-note').textContent = `${n(all.done)} done + ${n(all.dropped)} dropped`;
+    $('k-open').textContent = n(all.open);
+    const net = all.added - all.cleared;
+    const netTxt = `${net >= 0 ? '+' : '−'}${n(Math.abs(net))} net`;
+    $('k-open-note').textContent = `${n(all.carried)} carried in, ${netTxt}`;
+    $('k-open-note').title = `${n(all.carried)} items were already open when the range began; the range then added ${n(all.added)} and cleared ${n(all.cleared)}.`;
+  }
+
+  function renderCharts(b) {
+    const items = state.items;
+    const all = aggregate(items, b.start, b.end);
+    renderKpis(all);
+    const shrinks = drawChart($('chart-all'), all, 'Total queue activity');
+    $('ratio-all').innerHTML = ratioText(lastWeek(items, b.end));
+    $('legend-all').innerHTML = `<span><i class="sw" style="background:var(--new)"></i>New items</span>
+      <span><i class="sw" style="background:var(--cleared)"></i>Cleared</span>
+      <span><i class="sw box" style="background:var(--gap-fill)"></i>Net queue growth</span>
+      ${shrinks ? '<span><i class="sw box" style="background:var(--shrink-fill)"></i>Net queue shrink</span>' : ''}`;
+    for (const code of ['p', 'w']) {
+      const sub = items.filter((it) => it.lane === code);
+      const agg = aggregate(sub, b.start, b.end);
+      $('sub-' + code).textContent = `${n(agg.added)} new, ${n(agg.cleared)} cleared, ${n(agg.open)} open`;
+      $('ratio-' + code).innerHTML = ratioText(lastWeek(sub, b.end));
+      drawChart($('chart-' + code), agg, LANE_NAME[code] + ' lane');
+    }
+    const also = ['c', 'u'].map((code) => {
+      const agg = aggregate(items.filter((it) => it.lane === code), b.start, b.end);
+      return `${LANE_NAME[code].toLowerCase()} ${n(agg.added)} new, ${n(agg.cleared)} cleared, ${n(agg.open)} open`;
+    });
+    $('also').textContent = `Also in the total: ${also.join('; ')}. Crossing items touch both halves; unplaced items declare no touches.`;
+    ['chart-all', 'chart-p', 'chart-w'].forEach((id) => { const el = $(id); el._w = el.clientWidth; ro.observe(el); });
+  }
+
+  function branchRows() {
+    const { meta } = state;
+    const flight = new Map(), stranded = new Map(), strandedTitle = new Map();
+    for (const f of meta.flight || []) (flight.get(f.ref) || flight.set(f.ref, []).get(f.ref)).push(f.id);
+    for (const s of meta.stranded || []) {
+      strandedTitle.set(s.id, s.title);
+      for (const r of s.refs || []) (stranded.get(r) || stranded.set(r, []).get(r)).push(s.id);
+    }
+    const rank = { flight: 0, stranded: 1, none: 2 };
+    return (meta.branches || []).map((b) => {
+      const fl = flight.get(b.ref) || [], st = stranded.get(b.ref) || [];
+      const reading = fl.length ? 'flight' : st.length ? 'stranded' : 'none';
+      const ids = [...new Set([...fl, ...st, ...(b.ids || [])])];
+      return { ...b, reading, fl, st, ids, strandedTitle };
+    }).sort((a, z) => rank[a.reading] - rank[z.reading] || Date.parse(z.last) - Date.parse(a.last));
+  }
+
+  function idLink(id, rowsById, strandedTitle, branchName) {
+    const it = rowsById.get(id);
+    const repo = state.meta.repo_url;
+    if (it) return `<a class="idlink" href="${esc(repo)}/blob/main/docs/items/${encodeURIComponent(it.file)}" target="_blank" rel="noopener noreferrer" title="${esc(it.id + ': ' + it.title + ' (' + it.status + ')')}">${esc(id)}</a>`;
+    const t = strandedTitle.get(id);
+    return `<a class="idlink" href="${esc(repo)}/tree/${esc(branchName)}/docs/items" target="_blank" rel="noopener noreferrer" title="${esc(id + (t ? ': ' + t : '') + ' (only on this branch)')}">${esc(id)}</a>`;
+  }
+
+  function renderBranches() {
+    const { meta } = state;
+    const rows = branchRows();
+    const nFlight = (meta.flight || []).length, nStranded = (meta.stranded || []).length;
+    $('flight-sub').textContent = `${nFlight ? n(nFlight) : 'No'} item${nFlight === 1 ? '' : 's'} in flight and ${n(nStranded)} held only on a branch, across ${n(rows.length)} branch${rows.length === 1 ? '' : 'es'} besides main.`;
+    const label = { flight: 'In flight', stranded: 'Items only here', none: 'Nothing main lacks' };
+    const tbody = $('branches').querySelector('tbody');
+    if (!rows.length) {
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="5">No branches besides main. Nothing is in flight.</td></tr>';
+    } else {
+      tbody.innerHTML = rows.map((b) => {
+        const last = Date.parse(b.last);
+        const quiet = Date.now() - last > 48 * 3600 * 1000;
+        const ids = b.ids.length ? `<div class="ids">${b.ids.map((id) => idLink(id, state.byId, b.strandedTitle, b.name)).join('')}</div>` : '<span class="tag">none named</span>';
+        const tags = [b.store_only ? 'queue files only' : '', b.pr ? `PR <a href="${esc(meta.repo_url)}/pull/${b.pr}" target="_blank" rel="noopener noreferrer">#${b.pr}</a>` : ''].filter(Boolean).join(', ');
+        return `<tr>
+          <td><a class="branch" href="${esc(meta.repo_url)}/tree/${esc(b.name)}" target="_blank" rel="noopener noreferrer">${esc(b.name.replace(/^claude\//, ''))}</a>
+            <div class="subj">${esc(b.subject)}</div></td>
+          <td><span class="chip ${b.reading}">${label[b.reading]}</span>${tags ? `<div class="tag" style="margin-top:4px">${tags}</div>` : ''}</td>
+          <td data-label="Items">${ids}</td>
+          <td class="num" data-label="Last commit" style="white-space:nowrap"><span title="${esc(clock(last))}">${esc(ago(last))}</span>${quiet ? '<div class="tag">quiet</div>' : ''}</td>
+          <td class="num" data-label="vs main" style="white-space:nowrap" title="${b.ahead} commit(s) not on main; ${b.behind} main commit(s) not on this branch">+${b.ahead} / −${b.behind}</td>
+        </tr>`;
+      }).join('');
+    }
+    $('digest').textContent = meta.digest || 'docket digest produced no output at this snapshot.';
+  }
+
+  function renderComposition() {
+    const open = state.items.filter((it) => OPEN.includes(it.status));
+    $('comp-sub').textContent = `${n(open.length)} items open at this snapshot, whatever the range.`;
+    const count = (pred) => open.filter(pred).length;
+    const groups = [
+      ['By status', [['Ready', count((i) => i.status === 'ready')], ['Needs decision', count((i) => i.status === 'needs-decision')], ['Blocked', count((i) => i.status === 'blocked')], ['Untriaged', count((i) => i.status === 'untriaged')]]],
+      ['By priority', [['P0', count((i) => i.status !== 'untriaged' && i.priority === 'P0')], ['P1', count((i) => i.status !== 'untriaged' && i.priority === 'P1')], ['P2', count((i) => i.status !== 'untriaged' && i.priority === 'P2')], ['P3', count((i) => i.status !== 'untriaged' && i.priority === 'P3')], ['Untriaged', count((i) => i.status === 'untriaged')]]],
+      ['By lane', [['Product', count((i) => i.lane === 'p')], ['Workflow', count((i) => i.lane === 'w')], ['Crossing', count((i) => i.lane === 'c')], ['Unplaced', count((i) => i.lane === 'u')]]],
+    ];
+    const shade = [1, 0.72, 0.5, 0.32, 0.18];
+    const total = Math.max(1, open.length);
+    $('comp').innerHTML = groups.map(([title, parts]) => {
+      const counted = parts.reduce((a, [, v]) => a + v, 0);
+      const other = open.length - counted;
+      if (other > 0) parts = [...parts, ['Other', other]];
+      const bar = parts.map(([, v], i) => (v ? `<i style="width:${((v / total) * 100).toFixed(2)}%;opacity:${shade[i] ?? 0.12}"></i>` : '')).join('');
+      const legend = parts.map(([k, v], i) => `<span><i style="opacity:${shade[i] ?? 0.12}"></i>${esc(k)} <b class="num">${n(v)}</b></span>`).join('');
+      return `<div class="comp-row"><h3>${esc(title)}</h3><div class="bar" role="img" aria-label="${esc(title + ': ' + parts.map(([k, v]) => k + ' ' + v).join(', '))}">${bar}</div><div class="comp-legend">${legend}</div></div>`;
+    }).join('');
+  }
+
+  function renderList(b) {
+    const prioRank = (it) => (it.status === 'untriaged' ? 9 : ({ P0: 0, P1: 1, P2: 2, P3: 3 }[it.priority] ?? 8));
+    let rows;
+    if (state.list === 'added') rows = state.items.filter((it) => it.added != null && it.added >= b.start && it.added <= b.end).sort((a, z) => z.added - a.added || z.id.localeCompare(a.id));
+    else if (state.list === 'cleared') rows = state.items.filter((it) => CLOSED.includes(it.status) && it.closed != null && it.closed >= b.start && it.closed <= b.end).sort((a, z) => z.closed - a.closed || z.id.localeCompare(a.id));
+    else rows = state.items.filter((it) => OPEN.includes(it.status)).sort((a, z) => prioRank(a) - prioRank(z) || (z.added ?? 0) - (a.added ?? 0));
+    if (state.lane !== 'all') rows = rows.filter((it) => it.lane === state.lane);
+    const q = state.query.trim().toLowerCase();
+    if (q) rows = rows.filter((it) => (it.id + ' ' + it.title + ' ' + (it.feature || '')).toLowerCase().includes(q));
+    const what = { added: 'Added in the range', cleared: 'Cleared in the range', open: 'Open now, highest priority first' }[state.list];
+    $('list-sub').textContent = `${what}: ${n(rows.length)} item${rows.length === 1 ? '' : 's'}${state.lane !== 'all' ? ' in the ' + LANE_NAME[state.lane].toLowerCase() + ' lane' : ''}${q ? ' matching the filter' : ''}.`;
+    $('date-col').textContent = state.list === 'cleared' ? 'Closed' : 'Added';
+    const limit = state.showAll ? rows.length : 40;
+    const repo = state.meta.repo_url;
+    const tbody = $('items').querySelector('tbody');
+    tbody.innerHTML = rows.slice(0, limit).map((it) => {
+      const d = state.list === 'cleared' ? it.closed : it.added;
+      const st = CLOSED.includes(it.status) ? it.status : [it.status.replace('-', ' '), it.status === 'untriaged' ? '' : it.priority].filter(Boolean).join(', ');
+      return `<tr>
+        <td class="num" style="white-space:nowrap">${d != null ? esc(dayLabel(d)) : '<span class="tag">undated</span>'}</td>
+        <td class="title-cell"><a class="idlink" href="${esc(repo)}/blob/main/docs/items/${encodeURIComponent(it.file)}" target="_blank" rel="noopener noreferrer">${esc(it.id)}</a>
+          <span class="t" title="${esc(it.title)}">${esc(it.title)}</span></td>
+        <td data-label="Lane" style="white-space:nowrap">${esc(LANE_NAME[it.lane] || it.lane)}</td>
+        <td data-label="State" style="white-space:nowrap">${esc(st)}</td>
+      </tr>`;
+    }).join('') || '<tr class="empty-row"><td colspan="4">Nothing matches. Widen the range, switch lanes or clear the filter.</td></tr>';
+    const more = $('more');
+    more.hidden = rows.length <= 40;
+    more.textContent = state.showAll ? 'Show the first 40' : `Show all ${n(rows.length)}`;
+  }
+
+  function renderFooter() {
+    const { meta } = state;
+    const gen = Date.parse(meta.generated_at);
+    const dash = meta.dashboard_repo ? `https://github.com/${meta.dashboard_repo}` : '';
+    const ext = dash ? `<a href="${esc(dash)}/blob/main/extract.py" target="_blank" rel="noopener noreferrer">extract.py</a>` : 'extract.py';
+    const run = meta.build_run_url ? ` in <a href="${esc(meta.build_run_url)}" target="_blank" rel="noopener noreferrer">this workflow run</a>` : '';
+    $('foot-source').innerHTML = `Source: <a href="${esc(meta.repo_url)}" target="_blank" rel="noopener noreferrer">${esc(meta.repo_url.replace('https://', ''))}</a>, ${esc(meta.base_ref)} at <span class="mono">${esc(meta.sha.slice(0, 7))}</span> (committed ${esc(clock(Date.parse(meta.commit_time)))}), ${n(meta.item_count)} item files, read ${esc(clock(gen))} by ${ext} v${esc(meta.extractor_version)}${run}.`;
+    const ck = meta.check || {};
+    $('foot-check').innerHTML = ck.docket_open == null
+      ? '<span class="check-bad">docket digest did not run, so the open count was not cross-checked.</span>'
+      : ck.docket_open === ck.extractor_open
+        ? `<span class="check-ok">Cross-check passed: the open count matches docket's own digest (${n(ck.docket_open)}).</span>`
+        : `<span class="check-bad">Cross-check failed: ${n(ck.extractor_open)} open here against ${n(ck.docket_open)} in docket's digest.</span>`;
+    const wf = workflowUrl(), btn = $('run-now');
+    if (wf) { btn.href = wf; btn.hidden = false; }
+  }
+
+  function renderAll() {
+    const b = bounds();
+    renderHeader(b);
+    renderCharts(b);
+    renderBranches();
+    renderComposition();
+    renderList(b);
+    renderFooter();
+  }
+
+  /* ---------- copy helpers ---------- */
+  function summaryText() {
+    const { meta, items } = state;
+    const b = bounds();
+    const all = aggregate(items, b.start, b.end);
+    const wk = lastWeek(items, b.end);
+    const open = items.filter((i) => OPEN.includes(i.status));
+    const c = (pred) => open.filter(pred).length;
+    const lanes = ['p', 'w', 'c', 'u'].map((code) => {
+      const a = aggregate(items.filter((i) => i.lane === code), b.start, b.end);
+      return `${LANE_NAME[code].toLowerCase()} ${a.added} new / ${a.cleared} cleared / ${a.open} open`;
+    });
+    const branches = branchRows().map((r) => {
+      const what = { flight: 'in flight', stranded: 'items only here', none: 'nothing main lacks' }[r.reading];
+      return `  - ${r.name}: ${what}${r.ids.length ? ' [' + r.ids.join(', ') + ']' : ''}, last commit ${ago(Date.parse(r.last))}`;
+    });
+    return [
+      `Queue snapshot: ${meta.base_ref} at ${meta.sha.slice(0, 7)}, read ${clock(Date.parse(meta.generated_at))}`,
+      `Range ${dayLabel(b.start)} to ${dayLabel(b.end)}: ${all.added} new, ${all.cleared} cleared (${all.done} done, ${all.dropped} dropped); ${all.open} open now (${all.carried} carried in, ${all.added - all.cleared >= 0 ? '+' : ''}${all.added - all.cleared} net)`,
+      `Last 7 days: ${wk.f} filed, ${wk.c} cleared${wk.ratio != null ? ` (${wk.ratio.toFixed(2)} filed per cleared)` : ''}`,
+      `Open by status: ready ${c((i) => i.status === 'ready')}, needs-decision ${c((i) => i.status === 'needs-decision')}, blocked ${c((i) => i.status === 'blocked')}, untriaged ${c((i) => i.status === 'untriaged')}`,
+      `Open by priority: P0 ${c((i) => i.status !== 'untriaged' && i.priority === 'P0')}, P1 ${c((i) => i.status !== 'untriaged' && i.priority === 'P1')}, P2 ${c((i) => i.status !== 'untriaged' && i.priority === 'P2')}, P3 ${c((i) => i.status !== 'untriaged' && i.priority === 'P3')}`,
+      `By lane over the range: ${lanes.join('; ')}`,
+      `Branches besides main (docket flight/stranded reading):`,
+      ...(branches.length ? branches : ['  - none']),
+    ].join('\n');
+  }
+
+  async function copyText(text, btn) {
+    const box = $('copybox');
+    let ok = false;
+    try { await navigator.clipboard.writeText(text); ok = true; } catch (e) { ok = false; }
+    if (!ok) {
+      box.value = text; box.hidden = false; box.focus(); box.select();
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    }
+    if (ok) {
+      box.hidden = true;
+      const was = btn.textContent;
+      btn.textContent = 'Copied';
+      setTimeout(() => { btn.textContent = was; }, 1600);
+    } else {
+      box.value = text; box.hidden = false; box.select();
+      btn.textContent = 'Select the text below to copy';
+    }
+  }
+
+  document.addEventListener('click', (e) => {
+    const r = e.target.closest('[data-range]');
+    if (r && state.meta) { state.range = r.dataset.range; pref.set('range', state.range); state.showAll = false; renderAll(); return; }
+    const l = e.target.closest('[data-list]');
+    if (l && state.meta) {
+      state.list = l.dataset.list; state.showAll = false;
+      document.querySelectorAll('[data-list]').forEach((el) => el.setAttribute('aria-pressed', String(el === l)));
+      renderList(bounds()); return;
+    }
+    if (e.target.id === 'more') { state.showAll = !state.showAll; renderList(bounds()); return; }
+    if (e.target.id === 'copy-summary' && state.meta) { copyText(summaryText(), e.target); return; }
+  });
+  $('lane-filter').addEventListener('change', (e) => { state.lane = e.target.value; state.showAll = false; if (state.meta) renderList(bounds()); });
+  let qTimer;
+  $('q').addEventListener('input', (e) => {
+    clearTimeout(qTimer);
+    qTimer = setTimeout(() => { state.query = e.target.value; state.showAll = false; if (state.meta) renderList(bounds()); }, 120);
+  });
+
+  /* ---------- load and poll ---------- */
+  const POLL_MS = 5 * 60 * 1000; // how often an open tab checks for a newer snapshot
+  let loading = false;
+  function showState(html) {
+    $('dash').hidden = !!html;
+    const s = $('state');
+    s.hidden = !html;
+    if (html) s.innerHTML = html;
+  }
+
+  async function load() {
+    if (loading) return;
+    loading = true;
+    state.lastCheck = Date.now();
+    if (!state.meta) showState('<p>Reading the latest snapshot.</p>');
+    try {
+      const res = await fetch(`data/snapshot.json?t=${Date.now()}`, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const got = assemble(await res.json());
+      state.fetchError = null;
+      if (!state.meta || got.meta.refresh_id !== state.meta.refresh_id) {
+        state.meta = got.meta;
+        state.items = got.items;
+        state.byId = new Map(got.items.map((it) => [it.id, it]));
+        showState('');
+        renderAll();
+      } else {
+        renderHeader(bounds());
+      }
+    } catch (e) {
+      state.fetchError = String((e && e.message) || e);
+      if (state.meta) renderHeader(bounds());
+      else if (location.protocol === 'file:') showState('<p><strong>Open this page over HTTP rather than as a file.</strong></p><p>From the repository folder run <code>python3 -m http.server -d site 8000</code>, then visit http://localhost:8000.</p>');
+      else showState(`<p><strong>No snapshot to show yet (${esc(state.fetchError)}).</strong></p><p>The refresh workflow publishes <code>data/snapshot.json</code>. Run it from the repository's Actions tab, then reload.</p>`);
+    } finally {
+      loading = false;
+    }
+  }
+
+  load();
+  setInterval(load, POLL_MS);
+  setInterval(() => { if (state.meta) renderHeader(bounds()); }, 60000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && Date.now() - (state.lastCheck || 0) > 60000) load();
+  });
+})();
+</script>
+</body>
+</html>
