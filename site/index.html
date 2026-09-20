@@ -141,6 +141,12 @@ table.t { width: 100%; border-collapse: collapse; font-size: 14px; }
 table.t th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12.5px; padding: 6px 10px 6px 4px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
 table.t td { padding: 9px 10px 9px 4px; border-bottom: 1px solid var(--rule); vertical-align: top; }
 table.t tr:last-child td { border-bottom: 0; }
+table.t th[data-sort] { cursor: pointer; user-select: none; }
+table.t th[data-sort]:hover { color: var(--ink); }
+table.t th[data-sort] .arrow { display: inline-block; width: 0.9em; margin-left: 2px; opacity: 0.65; }
+table.t th[data-sort] .arrow::after { content: ''; }
+table.t th[aria-sort="ascending"] .arrow::after { content: '\25B2'; }
+table.t th[aria-sort="descending"] .arrow::after { content: '\25BC'; }
 .chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12.5px; font-weight: 600; white-space: nowrap; background: var(--chip); color: var(--ink-2); }
 .chip.flight { background: var(--open-tint); color: var(--open-ink); }
 .chip.stranded { background: var(--warn-tint); color: var(--warn); }
@@ -255,8 +261,8 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       </div>
       <div class="chart" id="chart-all" data-height="330" tabindex="0"></div>
       <div class="legend" id="legend-all"></div>
-      <h3 class="chart-title">Filed per cleared, by day</h3>
-      <p class="panel-sub">For each day, that day&rsquo;s items filed against items cleared, on a scale centered on 1.0 (the dashed line). Above it and shaded orange, more was filed than cleared that day; below it and shaded green, more was cleared than filed.</p>
+      <h3 class="chart-title">Filed minus cleared, by day</h3>
+      <p class="panel-sub">For each day, that day&rsquo;s items filed minus items cleared, on a scale centered on zero (the dashed line). Above it and orange, more was filed than cleared that day; below it and green, more was cleared than filed.</p>
       <div class="chart" id="chart-all-ratio" data-height="180" tabindex="0"></div>
     </section>
 
@@ -266,7 +272,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
         <p class="panel-sub num" id="sub-p"></p>
         <p class="ratio" id="ratio-p"></p>
         <div class="chart" id="chart-p" data-height="230" tabindex="0"></div>
-        <h3 class="chart-title">Filed per cleared, by day</h3>
+        <h3 class="chart-title">Filed minus cleared, by day</h3>
         <div class="chart" id="chart-p-ratio" data-height="150" tabindex="0"></div>
       </section>
       <section class="panel lane">
@@ -274,7 +280,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
         <p class="panel-sub num" id="sub-w"></p>
         <p class="ratio" id="ratio-w"></p>
         <div class="chart" id="chart-w" data-height="230" tabindex="0"></div>
-        <h3 class="chart-title">Filed per cleared, by day</h3>
+        <h3 class="chart-title">Filed minus cleared, by day</h3>
         <div class="chart" id="chart-w-ratio" data-height="150" tabindex="0"></div>
       </section>
     </div>
@@ -333,7 +339,13 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       </div>
       <div class="table-scroll">
         <table class="t stack" id="items">
-          <thead><tr><th id="date-col">Added</th><th>Item</th><th>Lane</th><th>State</th></tr></thead>
+          <thead><tr>
+            <th id="date-col" data-sort="date" tabindex="0"><span class="label">Added</span><span class="arrow" aria-hidden="true"></span></th>
+            <th data-sort="item" tabindex="0"><span class="label">Item</span><span class="arrow" aria-hidden="true"></span></th>
+            <th data-sort="lane" tabindex="0"><span class="label">Lane</span><span class="arrow" aria-hidden="true"></span></th>
+            <th data-sort="state" tabindex="0"><span class="label">State</span><span class="arrow" aria-hidden="true"></span></th>
+            <th data-sort="priority" tabindex="0"><span class="label">Priority</span><span class="arrow" aria-hidden="true"></span></th>
+          </tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -388,7 +400,11 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
   const state = {
     meta: null, items: [], byId: new Map(),
     range: pref.get('range', 'all'), list: 'added', lane: 'all', query: '', showAll: false,
+    sortKey: null, sortDir: null,
   };
+  // Which direction a column starts in on its first click: newest-first for
+  // dates, highest-priority-first for priority, A-Z for the text columns.
+  const SORT_DEFAULT_DIR = { date: 'desc', item: 'asc', lane: 'asc', state: 'asc', priority: 'asc' };
 
   /* ---------- data ---------- */
   function assemble(snap) {
@@ -456,16 +472,16 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     : `Last ${window} days: <b class="num">${n(w.f)}</b> filed, none cleared`;
 
   // One point per day in [start, end]: that day's own filed and cleared counts,
-  // and their ratio (null on a day nothing cleared, since the ratio is undefined).
-  function dailyRatio(items, start, end) {
+  // and their net (filed minus cleared).
+  function dailyNet(items, start, end) {
     const len = end - start + 1;
     const filed = new Array(len).fill(0), cleared = new Array(len).fill(0);
     for (const it of items) {
       if (it.added != null && it.added >= start && it.added <= end) filed[it.added - start]++;
       if (CLOSED.includes(it.status) && it.closed != null && it.closed >= start && it.closed <= end) cleared[it.closed - start]++;
     }
-    const ratio = cleared.map((c, i) => (c > 0 ? filed[i] / c : null));
-    return { start, len, filed, cleared, ratio };
+    const net = filed.map((f, i) => f - cleared[i]);
+    return { start, len, filed, cleared, net };
   }
 
   /* ---------- chart ---------- */
@@ -634,8 +650,8 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     return shrinks;
   }
 
-  function drawRatioChart(host, data, label) {
-    charts.set(host.id, { redraw: () => drawRatioChart(host, data, label) });
+  function drawNetChart(host, data, label) {
+    charts.set(host.id, { redraw: () => drawNetChart(host, data, label) });
     const W = Math.max(260, Math.floor(host.clientWidth));
     const compact = W < 540;
     const H = compact ? Math.round(Number(host.dataset.height) * 0.82) : Number(host.dataset.height);
@@ -651,50 +667,47 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     const bandPad = labelBars ? 18 : 3;
     const halfBand = ph / 2 - bandPad;
 
-    // Symmetric log2 scale centered on 1.0 (breakeven), so 2x filed and 2x cleared
-    // sit equally far from the middle. Values beyond the chosen level are pinned
-    // to the top/bottom edge; the tooltip always shows the exact ratio.
-    const finite = data.ratio.filter((v) => v != null && v > 0);
-    const maxAbsLog = finite.length ? Math.max(...finite.map((v) => Math.abs(Math.log2(v)))) : 0;
-    const levelLog2 = Math.min(4, Math.max(1, Math.ceil(maxAbsLog)));
+    // Linear scale centered on 0 (breakeven), so a day net-filed and a day
+    // net-cleared by the same amount sit equally far from the middle.
+    const maxAbs = Math.max(1, ...data.net.map((v) => Math.abs(v)));
+    const step = niceStep(maxAbs, compact ? 3 : 4);
+    const levelMax = Math.ceil(maxAbs / step) * step;
     const x = (i) => m.l + (len === 1 ? pw / 2 : (i * pw) / (len - 1));
-    const yOfLog = (lg) => centerY - (Math.max(-levelLog2, Math.min(levelLog2, lg)) / levelLog2) * halfBand;
-    const y = (v) => (v > 0 ? yOfLog(Math.log2(v)) : yOfLog(-levelLog2));
+    const y = (v) => centerY - (Math.max(-levelMax, Math.min(levelMax, v)) / levelMax) * halfBand;
 
     let g = '';
-    for (let k = -levelLog2; k <= levelLog2; k++) {
-      if (k === 0) continue; // the 1.0 line is drawn separately, as the reference axis
-      const yy = yOfLog(k).toFixed(1);
+    for (let v = -levelMax; v <= levelMax + 1e-9; v += step) {
+      if (v === 0) continue; // the 0 line is drawn separately, as the reference axis
+      const yy = y(v).toFixed(1);
       g += `<line class="grid" x1="${m.l}" x2="${m.l + pw}" y1="${yy}" y2="${yy}"/>`;
-      g += `<text class="tick" x="${m.l - 8}" y="${yy}" dy="0.32em" text-anchor="end">${Math.pow(2, k)}</text>`;
+      g += `<text class="tick" x="${m.l - 8}" y="${yy}" dy="0.32em" text-anchor="end">${n(v)}</text>`;
     }
     for (const i of xTicks(len, pw)) {
       g += `<text class="tick" x="${x(i).toFixed(1)}" y="${base + 20}" text-anchor="middle">${esc(dayLabel(data.start + i))}</text>`;
     }
     const refY = centerY.toFixed(1);
     const ref = `<line class="ref" x1="${m.l}" x2="${m.l + pw}" y1="${refY}" y2="${refY}"/>
-      <text class="tick ref-label" x="${(m.l + pw + 6).toFixed(1)}" y="${refY}" dy="0.32em">1.0</text>`;
+      <text class="tick ref-label" x="${(m.l + pw + 6).toFixed(1)}" y="${refY}" dy="0.32em">0</text>`;
 
-    // One bar per day, rising above 1.0 (filed-dominant) or falling below it
-    // (cleared-dominant). Bars are labeled directly when there is room; once
-    // days are packed too tight for that, only the latest value gets a pill.
+    // One bar per day, rising above 0 (more filed than cleared) or falling
+    // below it (more cleared than filed). Bars are labeled directly when
+    // there is room; once days are packed too tight for that, only the
+    // latest value gets a pill.
     const barW = Math.max(2, Math.min(26, spacing * 0.55));
     let bars = '';
     for (let i = 0; i < len; i++) {
-      const v = data.ratio[i];
-      if (v == null) continue;
-      const cx = x(i), yv = y(v), up = v >= 1;
+      const v = data.net[i], cx = x(i), yv = y(v), up = v >= 0;
       const barTop = Math.min(yv, centerY), h = Math.max(Math.abs(yv - centerY), 1);
       bars += `<rect class="${up ? 'bar-up' : 'bar-down'}" data-i="${i}" x="${(cx - barW / 2).toFixed(2)}" y="${barTop.toFixed(2)}" width="${barW.toFixed(2)}" height="${h.toFixed(2)}"/>`;
       if (labelBars) {
         const ly = up ? Math.max(topY + 10, barTop - 5) : Math.min(base - 2, barTop + h + 13);
-        bars += `<text class="bar-label ${up ? 'lbl-up' : 'lbl-down'}" x="${cx.toFixed(2)}" y="${ly.toFixed(2)}" text-anchor="middle">${v.toFixed(2)}</text>`;
+        bars += `<text class="bar-label ${up ? 'lbl-up' : 'lbl-down'}" x="${cx.toFixed(2)}" y="${ly.toFixed(2)}" text-anchor="middle">${signed(v)}</text>`;
       }
     }
-    const lastIdx = [...Array(len).keys()].reverse().find((i) => data.ratio[i] != null);
+    const lastIdx = len - 1;
     let pill = '';
-    if (!labelBars && lastIdx != null) {
-      const v = data.ratio[lastIdx], cy = y(v), text = v.toFixed(2), up = v >= 1;
+    if (!labelBars) {
+      const v = data.net[lastIdx], cy = y(v), text = signed(v), up = v >= 0;
       const w = text.length * 7.9 + 14;
       const px = Math.min(W - w - 1, x(lastIdx) + 9);
       pill = `<g class="pill ${up ? 'pill-new' : 'pill-clr'}"><rect x="${px.toFixed(1)}" y="${(cy - 11).toFixed(1)}" width="${w.toFixed(1)}" height="22" rx="6"/>
@@ -704,7 +717,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     const hover = `<g class="hover" visibility="hidden"><line class="xhair" y1="${topY}" y2="${base}"/></g>
       <rect class="hit" x="${m.l - 6}" y="${topY}" width="${pw + 12}" height="${ph}"/>`;
 
-    const aria = `${label} filed per cleared by day, ${dayLabel(data.start)} to ${dayLabel(data.start + len - 1)}.`;
+    const aria = `${label} filed minus cleared by day, ${dayLabel(data.start)} to ${dayLabel(data.start + len - 1)}.`;
     host.setAttribute('role', 'img');
     host.setAttribute('aria-label', aria + ' Use the arrow keys to read individual days.');
     host.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">${g}${ref}${bars}${pill}${hover}</svg><div class="tip" hidden></div>`;
@@ -714,7 +727,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     let curI = -1, curBar = null;
     const show = (i) => {
       curI = Math.max(0, Math.min(len - 1, i));
-      const px = x(curI), v = data.ratio[curI];
+      const px = x(curI), v = data.net[curI];
       xh.setAttribute('x1', px); xh.setAttribute('x2', px);
       if (curBar) curBar.classList.remove('hovered');
       curBar = svg.querySelector(`[data-i="${curI}"]`);
@@ -724,14 +737,13 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       tip.innerHTML = `<b>${esc(dayLabel(data.start + curI, { weekday: 'short' }))}</b><table>
         <tr class="k-new"><td>Filed</td><td>${n(f)}</td></tr>
         <tr class="k-clr"><td>Cleared</td><td>${n(c)}</td></tr>
-        <tr class="k-net"><td>Ratio</td><td>${v != null ? v.toFixed(2) : '—'}</td></tr></table>
-        ${v == null ? '<p style="margin:4px 0 0;color:var(--muted);font-size:12px">Nothing cleared this day.</p>' : ''}`;
+        <tr class="k-net"><td>Net</td><td class="${trend(v)}">${signed(v)}</td></tr></table>`;
       tip.hidden = false;
       const tw = tip.offsetWidth, th = tip.offsetHeight;
       let left = px + 14;
       if (left + tw > W) left = px - tw - 14;
       tip.style.left = Math.max(0, left) + 'px';
-      tip.style.top = Math.max(0, Math.min(H - th, (v != null ? y(v) : centerY) - th / 2)) + 'px';
+      tip.style.top = Math.max(0, Math.min(H - th, y(v) - th / 2)) + 'px';
     };
     const hide = () => {
       hv.setAttribute('visibility', 'hidden'); tip.hidden = true; curI = -1;
@@ -752,7 +764,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
         show((curI < 0 ? len - 1 : curI) + (e.key === 'ArrowLeft' ? -1 : 1));
       } else if (e.key === 'Escape') hide();
     };
-    host.onfocus = () => show(lastIdx != null ? lastIdx : len - 1);
+    host.onfocus = () => show(lastIdx);
     host.onblur = hide;
   }
 
@@ -818,14 +830,14 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       <span><i class="sw" style="background:var(--cleared)"></i>Cleared</span>
       <span><i class="sw box" style="background:var(--gap-fill)"></i>Net queue growth</span>
       ${shrinks ? '<span><i class="sw box" style="background:var(--shrink-fill)"></i>Net queue shrink</span>' : ''}`;
-    drawRatioChart($('chart-all-ratio'), dailyRatio(items, b.start, b.end), 'Total queue');
+    drawNetChart($('chart-all-ratio'), dailyNet(items, b.start, b.end), 'Total queue');
     for (const code of ['p', 'w']) {
       const sub = items.filter((it) => it.lane === code);
       const agg = aggregate(sub, b.start, b.end);
       $('sub-' + code).textContent = `${n(agg.added)} new, ${n(agg.cleared)} cleared, ${n(agg.open)} open`;
       $('ratio-' + code).innerHTML = ratioText(lastN(sub, b.end, window), window);
       drawChart($('chart-' + code), agg, LANE_NAME[code] + ' lane');
-      drawRatioChart($('chart-' + code + '-ratio'), dailyRatio(sub, b.start, b.end), LANE_NAME[code] + ' lane');
+      drawNetChart($('chart-' + code + '-ratio'), dailyNet(sub, b.start, b.end), LANE_NAME[code] + ' lane');
     }
     const also = ['c', 'u'].map((code) => {
       const agg = aggregate(items.filter((it) => it.lane === code), b.start, b.end);
@@ -912,30 +924,56 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
 
   function renderList(b) {
     const prioRank = (it) => (it.status === 'untriaged' ? 9 : ({ P0: 0, P1: 1, P2: 2, P3: 3 }[it.priority] ?? 8));
+    // The default order for each tab, used until the user picks a column.
+    const defaultSort = (a, z) => {
+      if (state.list === 'added') return z.added - a.added || z.id.localeCompare(a.id);
+      if (state.list === 'cleared') return z.closed - a.closed || z.id.localeCompare(a.id);
+      return prioRank(a) - prioRank(z) || (z.added ?? 0) - (a.added ?? 0);
+    };
+    // A user-picked column always wins ties by id, so the order stays stable
+    // (and matches) when two rows tie on the chosen column.
+    const columnSort = (a, z) => {
+      const mul = state.sortDir === 'desc' ? -1 : 1;
+      let cmp = 0;
+      if (state.sortKey === 'date') {
+        const da = state.list === 'cleared' ? a.closed : a.added, dz = state.list === 'cleared' ? z.closed : z.added;
+        cmp = da == null && dz == null ? 0 : da == null ? 1 : dz == null ? -1 : (da - dz) * mul;
+      } else if (state.sortKey === 'item') cmp = a.id.localeCompare(z.id) * mul;
+      else if (state.sortKey === 'lane') cmp = (LANE_NAME[a.lane] || a.lane).localeCompare(LANE_NAME[z.lane] || z.lane) * mul;
+      else if (state.sortKey === 'state') cmp = a.status.localeCompare(z.status) * mul;
+      else if (state.sortKey === 'priority') cmp = (prioRank(a) - prioRank(z)) * mul;
+      return cmp || z.id.localeCompare(a.id);
+    };
+    const sortFn = state.sortKey ? columnSort : defaultSort;
     let rows;
-    if (state.list === 'added') rows = state.items.filter((it) => it.added != null && it.added >= b.start && it.added <= b.end).sort((a, z) => z.added - a.added || z.id.localeCompare(a.id));
-    else if (state.list === 'cleared') rows = state.items.filter((it) => CLOSED.includes(it.status) && it.closed != null && it.closed >= b.start && it.closed <= b.end).sort((a, z) => z.closed - a.closed || z.id.localeCompare(a.id));
-    else rows = state.items.filter((it) => OPEN.includes(it.status)).sort((a, z) => prioRank(a) - prioRank(z) || (z.added ?? 0) - (a.added ?? 0));
+    if (state.list === 'added') rows = state.items.filter((it) => it.added != null && it.added >= b.start && it.added <= b.end).sort(sortFn);
+    else if (state.list === 'cleared') rows = state.items.filter((it) => CLOSED.includes(it.status) && it.closed != null && it.closed >= b.start && it.closed <= b.end).sort(sortFn);
+    else rows = state.items.filter((it) => OPEN.includes(it.status)).sort(sortFn);
     if (state.lane !== 'all') rows = rows.filter((it) => it.lane === state.lane);
     const q = state.query.trim().toLowerCase();
     if (q) rows = rows.filter((it) => (it.id + ' ' + it.title + ' ' + (it.feature || '')).toLowerCase().includes(q));
     const what = { added: 'Added in the range', cleared: 'Cleared in the range', open: 'Open now, highest priority first' }[state.list];
     $('list-sub').textContent = `${what}: ${n(rows.length)} item${rows.length === 1 ? '' : 's'}${state.lane !== 'all' ? ' in the ' + LANE_NAME[state.lane].toLowerCase() + ' lane' : ''}${q ? ' matching the filter' : ''}.`;
-    $('date-col').textContent = state.list === 'cleared' ? 'Closed' : 'Added';
+    $('date-col').querySelector('.label').textContent = state.list === 'cleared' ? 'Closed' : 'Added';
+    $('items').querySelectorAll('thead th[data-sort]').forEach((th) => {
+      th.setAttribute('aria-sort', state.sortKey === th.dataset.sort ? (state.sortDir === 'desc' ? 'descending' : 'ascending') : 'none');
+    });
     const limit = state.showAll ? rows.length : 40;
     const repo = state.meta.repo_url;
     const tbody = $('items').querySelector('tbody');
     tbody.innerHTML = rows.slice(0, limit).map((it) => {
       const d = state.list === 'cleared' ? it.closed : it.added;
-      const st = CLOSED.includes(it.status) ? it.status : [it.status.replace('-', ' '), it.status === 'untriaged' ? '' : it.priority].filter(Boolean).join(', ');
+      const st = CLOSED.includes(it.status) ? it.status : it.status.replace('-', ' ');
+      const prio = it.status === 'untriaged' ? '—' : (it.priority || '—');
       return `<tr>
         <td class="num" style="white-space:nowrap">${d != null ? esc(dayLabel(d)) : '<span class="tag">undated</span>'}</td>
         <td class="title-cell"><a class="idlink" href="${esc(repo)}/blob/main/docs/items/${encodeURIComponent(it.file)}" target="_blank" rel="noopener noreferrer">${esc(it.id)}</a>
           <span class="t" title="${esc(it.title)}">${esc(it.title)}</span></td>
         <td data-label="Lane" style="white-space:nowrap">${esc(LANE_NAME[it.lane] || it.lane)}</td>
         <td data-label="State" style="white-space:nowrap">${esc(st)}</td>
+        <td data-label="Priority" style="white-space:nowrap">${esc(prio)}</td>
       </tr>`;
-    }).join('') || '<tr class="empty-row"><td colspan="4">Nothing matches. Widen the range, switch lanes or clear the filter.</td></tr>';
+    }).join('') || '<tr class="empty-row"><td colspan="5">Nothing matches. Widen the range, switch lanes or clear the filter.</td></tr>';
     const more = $('more');
     more.hidden = rows.length <= 40;
     more.textContent = state.showAll ? 'Show the first 40' : `Show all ${n(rows.length)}`;
@@ -1025,8 +1063,18 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       document.querySelectorAll('[data-list]').forEach((el) => el.setAttribute('aria-pressed', String(el === l)));
       renderList(bounds()); return;
     }
+    const th = e.target.closest('#items thead th[data-sort]');
+    if (th && state.meta) {
+      const key = th.dataset.sort;
+      state.sortDir = state.sortKey === key ? (state.sortDir === 'asc' ? 'desc' : 'asc') : SORT_DEFAULT_DIR[key];
+      state.sortKey = key;
+      renderList(bounds()); return;
+    }
     if (e.target.id === 'more') { state.showAll = !state.showAll; renderList(bounds()); return; }
     if (e.target.id === 'copy-summary' && state.meta) { copyText(summaryText(), e.target); return; }
+  });
+  document.addEventListener('keydown', (e) => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('#items thead th[data-sort]')) { e.preventDefault(); e.target.click(); }
   });
   $('lane-filter').addEventListener('change', (e) => { state.lane = e.target.value; state.showAll = false; if (state.meta) renderList(bounds()); });
   let qTimer;
