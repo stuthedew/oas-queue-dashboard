@@ -12,9 +12,8 @@
 :root {
   --paper: #ffffff; --panel: #f5f7fa; --ink: #1d2430; --ink-2: #46505f; --muted: #5f6b7e;
   --rule: #e2e7ee; --grid: #e4e8ee;
-  --new: #d0611d; --new-ink: #a84a0c; --new-tint: #fdf0e6; --gap-fill: rgba(208, 97, 29, 0.17);
-  --cleared: #3b8a3e; --cleared-ink: #2b6c2e; --cleared-tint: #ecf5e9;
-  --under-fill: rgba(59, 138, 62, 0.10); --shrink-fill: rgba(59, 138, 62, 0.30);
+  --new: #d0611d; --new-ink: #a84a0c; --new-tint: #fdf0e6; --add-fill: rgba(208, 97, 29, 0.66);
+  --cleared: #3b8a3e; --cleared-ink: #2b6c2e; --cleared-tint: #ecf5e9; --clr-fill: rgba(59, 138, 62, 0.66);
   --open: #1d62a8; --open-ink: #1a5794; --open-tint: #e9f1fa;
   --warn: #8a5500; --warn-tint: #fff4dc; --chip: #e9edf3;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
@@ -27,9 +26,8 @@
   :root:not([data-theme="light"]) {
     --paper: #111418; --panel: #191d23; --ink: #e8ecf1; --ink-2: #b9c2cf; --muted: #8f9bae;
     --rule: #29303a; --grid: #262c35;
-    --new: #f0894a; --new-ink: #f6a877; --new-tint: #2a1d15; --gap-fill: rgba(240, 137, 74, 0.20);
-    --cleared: #69b96c; --cleared-ink: #92d294; --cleared-tint: #17241a;
-    --under-fill: rgba(105, 185, 108, 0.12); --shrink-fill: rgba(105, 185, 108, 0.32);
+    --new: #f0894a; --new-ink: #f6a877; --new-tint: #2a1d15; --add-fill: rgba(240, 137, 74, 0.60);
+    --cleared: #69b96c; --cleared-ink: #92d294; --cleared-tint: #17241a; --clr-fill: rgba(105, 185, 108, 0.60);
     --open: #71a7e6; --open-ink: #98c1f1; --open-tint: #152233;
     --warn: #f0b64a; --warn-tint: #2d2412; --chip: #232932;
     color-scheme: dark;
@@ -38,9 +36,8 @@
 :root[data-theme="dark"] {
   --paper: #111418; --panel: #191d23; --ink: #e8ecf1; --ink-2: #b9c2cf; --muted: #8f9bae;
   --rule: #29303a; --grid: #262c35;
-  --new: #f0894a; --new-ink: #f6a877; --new-tint: #2a1d15; --gap-fill: rgba(240, 137, 74, 0.20);
-  --cleared: #69b96c; --cleared-ink: #92d294; --cleared-tint: #17241a;
-  --under-fill: rgba(105, 185, 108, 0.12); --shrink-fill: rgba(105, 185, 108, 0.32);
+  --new: #f0894a; --new-ink: #f6a877; --new-tint: #2a1d15; --add-fill: rgba(240, 137, 74, 0.60);
+  --cleared: #69b96c; --cleared-ink: #92d294; --cleared-tint: #17241a; --clr-fill: rgba(105, 185, 108, 0.60);
   --open: #71a7e6; --open-ink: #98c1f1; --open-tint: #152233;
   --warn: #f0b64a; --warn-tint: #2d2412; --chip: #232932;
   color-scheme: dark;
@@ -103,14 +100,15 @@ button { font: inherit; color: inherit; }
 .chart svg { display: block; overflow: visible; }
 .chart .grid { stroke: var(--grid); stroke-width: 1; }
 .chart .tick { fill: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
-.chart .l-new { fill: none; stroke: var(--new); stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
-.chart .l-clr { fill: none; stroke: var(--cleared); stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
-.chart .f-under { fill: var(--under-fill); }
-.chart .f-gap { fill: var(--gap-fill); }
-.chart .f-shrink { fill: var(--shrink-fill); }
+.chart .l-open { fill: none; stroke: var(--open); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.chart .f-add { fill: var(--add-fill); }
+.chart .f-clr { fill: var(--clr-fill); }
 .chart .dot-new { fill: var(--new); } .chart .dot-clr { fill: var(--cleared); }
+.chart .dot-open { fill: var(--open); stroke: var(--panel); stroke-width: 2; }
+.chart .lead { stroke: var(--open); stroke-width: 1.25; stroke-dasharray: 3 4; opacity: 0.6; }
 .chart .pill-new rect { fill: var(--new-tint); } .chart .pill-new text { fill: var(--new-ink); }
 .chart .pill-clr rect { fill: var(--cleared-tint); } .chart .pill-clr text { fill: var(--cleared-ink); }
+.chart .pill-open rect { fill: var(--open); } .chart .pill-open text { fill: var(--paper); }
 .chart .pill text { font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums; }
 .chart .bar-up { fill: var(--new); } .chart .bar-down { fill: var(--cleared); }
 .chart .bar-up.hovered, .chart .bar-down.hovered { filter: brightness(1.15); }
@@ -127,6 +125,9 @@ button { font: inherit; color: inherit; }
 .tip td { padding: 0 0 0 8px; text-align: right; font-variant-numeric: tabular-nums; }
 .tip td:first-child { padding-left: 0; text-align: left; }
 .tip .k-new { color: var(--new-ink); } .tip .k-clr { color: var(--cleared-ink); }
+.tip .k-head td { color: var(--muted); }
+.tip .k-open td { padding-bottom: 4px; }
+.tip .k-open td + td { font-weight: 700; color: var(--open-ink); }
 .tip .k-net td { border-top: 1px solid var(--rule); padding-top: 3px; }
 .tip .k-net td + td { font-weight: 700; }
 .tip .up { color: var(--new-ink); } .tip .down { color: var(--cleared-ink); }
@@ -255,7 +256,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       <div class="panel-head">
         <div>
           <h2>Total queue activity</h2>
-          <p class="panel-sub">Cumulative additions against clearances over the range. The shaded gap between the lines is net queue growth.</p>
+          <p class="panel-sub">The line is how many items were open at the end of each day. Above it, orange, is what was filed that day; below it, green, is what was cleared. Where the band above is thicker, the queue grew.</p>
         </div>
         <p class="ratio" id="ratio-all"></p>
       </div>
@@ -456,6 +457,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
   function aggregate(items, start, end) {
     const len = end - start + 1;
     const dayNew = new Array(len).fill(0), dayClr = new Array(len).fill(0);
+    const span = new Array(len + 1).fill(0);
     let added = 0, cleared = 0, done = 0, dropped = 0, open = 0, carried = 0;
     for (const it of items) {
       const isOpen = OPEN.includes(it.status), isClosed = CLOSED.includes(it.status);
@@ -467,11 +469,31 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       if (isOpen) open++;
       const existedBefore = it.added == null || it.added < start;
       if (existedBefore && (isOpen || (isClosed && it.closed != null && it.closed >= start))) carried++;
+      // For the open line: an item stands in the queue from the day it arrived
+      // to the day before it was cleared, and undated arrivals (the earliest,
+      // pre-field items) were there from the start of any range. Mark the ends
+      // of that span on a running tally rather than recounting every item for
+      // every day. An item whose exit carries no date, and one whose status
+      // this page does not know, is left out of the line: counting an arrival
+      // whose departure cannot be placed would walk the line off by one for
+      // every day after it.
+      if (isOpen || (isClosed && it.closed != null)) {
+        const from = Math.max(it.added == null ? start : it.added, start);
+        const to = Math.min(isOpen ? end : it.closed - 1, end);
+        if (from <= to) { span[from - start]++; span[to - start + 1]--; }
+      }
     }
     const cumNew = [], cumClr = [];
     let a = 0, c = 0;
     for (let i = 0; i < len; i++) { a += dayNew[i]; c += dayClr[i]; cumNew.push(a); cumClr.push(c); }
-    return { len, start, dayNew, dayClr, cumNew, cumClr, added, cleared, done, dropped, open, carried };
+    // How many items stood open at the end of each day. The last point is the
+    // headline "open now" figure by construction -- nothing dated has left by
+    // then -- and in a store where every cleared item carries a `closed:` date
+    // each step is exactly that day's filed minus cleared.
+    const openLevel = [];
+    let lvl = 0;
+    for (let i = 0; i < len; i++) { lvl += span[i]; openLevel.push(lvl); }
+    return { len, start, dayNew, dayClr, cumNew, cumClr, openLevel, added, cleared, done, dropped, open, carried };
   }
 
   function lastN(items, end, window) {
@@ -560,87 +582,111 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
   }
 
   const charts = new Map();
+  // The queue itself, not a running total: the line is how many items stood
+  // open at the end of each day, the band above it is what was filed that day
+  // and the band below it is what was cleared. Each band's thickness is that
+  // day's own flow, so wherever the upper one is thicker the line steps up.
   function drawChart(host, agg, label) {
     charts.set(host.id, { redraw: () => drawChart(host, agg, label) });
     const W = Math.max(260, Math.floor(host.clientWidth));
     const compact = W < 540;
     const H = compact ? Math.round(Number(host.dataset.height) * 0.82) : Number(host.dataset.height);
-    const m = { l: compact ? 34 : 44, r: compact ? 50 : 62, t: 14, b: 28 };
+    const m = { l: compact ? 40 : 50, r: compact ? 14 : 18, t: 34, b: 28 };
     const pw = W - m.l - m.r, ph = H - m.t - m.b, len = agg.len, base = m.t + ph;
-    const top = Math.max(agg.cumNew[len - 1], agg.cumClr[len - 1], 1);
-    const step = niceStep(top, compact ? 3 : 4);
-    const yMax = Math.ceil((top * 1.08) / step) * step;
+    const lvl = agg.openLevel;
+    const tops = lvl.map((v, i) => v + agg.dayNew[i]);
+    const bots = lvl.map((v, i) => v - agg.dayClr[i]);
+
+    // These are counts, so the scale sits on zero whenever the drawn band
+    // comes anywhere near it, and a day that cleared more than the whole queue
+    // holds runs the band below it. The scale only floats up off zero when
+    // anchoring there would squeeze every band into a sliver at the top --
+    // a short range over a queue that never approaches empty.
+    const hi = Math.max(1, ...tops), low = Math.min(...bots);
+    const lo = low > 0.4 * hi ? low : Math.min(0, low);
+    const pad = Math.max(1, hi - lo) * 0.07;
+    const yMax = hi + pad, yMin = lo === 0 ? 0 : lo - pad;
+    const step = niceStep(Math.max(1, yMax - yMin), compact ? 4 : 5);
     const x = (i) => m.l + (len === 1 ? pw / 2 : (i * pw) / (len - 1));
-    const y = (v) => m.t + ph - (v / yMax) * ph;
-    const xs = agg.cumNew.map((_, i) => x(i));
-    const yn = agg.cumNew.map(y), yc = agg.cumClr.map(y);
-    const N = curves(xs, yn), C = curves(xs, yc);
+    const y = (v) => m.t + ph - ((v - yMin) / (yMax - yMin)) * ph;
+    const xs = lvl.map((_, i) => x(i));
+    const yl = lvl.map(y);
+    const LN = curves(xs, yl), TP = curves(xs, tops.map(y)), BT = curves(xs, bots.map(y));
     const id = host.id;
-    const L = xs[0].toFixed(2), R = xs[len - 1].toFixed(2), T = (m.t - 40).toFixed(2);
-    const shrinks = agg.cumClr.some((v, i) => v > agg.cumNew[i]);
+    const L = xs[0].toFixed(2), R = xs[len - 1].toFixed(2);
+    const above = (m.t - 80).toFixed(2), below = (base + 80).toFixed(2);
 
     let g = '';
-    for (let v = 0; v <= yMax + 1e-9; v += step) {
+    // `|| 0` because Math.ceil hands back -0 for a scale that dips just under
+    // zero, and -0 formats as "-0" on the axis.
+    for (let v = Math.ceil(yMin / step) * step || 0; v <= yMax + 1e-9; v += step) {
       const yy = y(v).toFixed(1);
-      g += `<line class="grid" x1="${m.l}" x2="${m.l + pw}" y1="${yy}" y2="${yy}"/>`;
+      g += `<line class="${v === 0 && yMin < 0 ? 'ref' : 'grid'}" x1="${m.l}" x2="${m.l + pw}" y1="${yy}" y2="${yy}"/>`;
       g += `<text class="tick" x="${m.l - 8}" y="${yy}" dy="0.32em" text-anchor="end">${n(v)}</text>`;
     }
     for (const i of xTicks(len, pw)) {
       g += `<text class="tick" x="${x(i).toFixed(1)}" y="${base + 20}" text-anchor="middle">${esc(dayLabel(agg.start + i))}</text>`;
     }
-    const clip = `<defs>
-      <clipPath id="${id}-aboveC"><path d="${C.fwd}L${R},${T}L${L},${T}Z"/></clipPath>
-      <clipPath id="${id}-aboveN"><path d="${N.fwd}L${R},${T}L${L},${T}Z"/></clipPath>
-    </defs>`;
-    const band = `${N.fwd}${C.back}Z`;
-    const fills = `<path class="f-under" d="${C.fwd}L${R},${base}L${L},${base}Z"/>
-      <path class="f-gap" d="${band}" clip-path="url(#${id}-aboveC)"/>
-      ${shrinks ? `<path class="f-shrink" d="${band}" clip-path="url(#${id}-aboveN)"/>` : ''}`;
-    const lines = `<path class="l-clr" d="${C.fwd}"/><path class="l-new" d="${N.fwd}"/>
-      <circle class="dot-clr" cx="${R}" cy="${yc[len - 1].toFixed(2)}" r="4.5"/>
-      <circle class="dot-new" cx="${R}" cy="${yn[len - 1].toFixed(2)}" r="4.5"/>`;
 
-    const pill = (cls, text, cy) => {
-      const w = String(text).length * 7.9 + 14;
-      const px = Math.min(W - w - 1, xs[len - 1] + 9);
-      return `<g class="pill ${cls}"><rect x="${px.toFixed(1)}" y="${(cy - 11).toFixed(1)}" width="${w.toFixed(1)}" height="22" rx="6"/>
-        <text x="${(px + w / 2).toFixed(1)}" y="${cy.toFixed(1)}" dy="0.34em" text-anchor="middle">${esc(text)}</text></g>`;
+    // Each band is held to its own side of the line: the curve through one
+    // day's points is smoothed independently of the line's, so without this a
+    // sharp change in a band can carry a sliver of it across to the other side.
+    const clip = `<defs>
+      <clipPath id="${id}-plot"><rect x="${(m.l - 1).toFixed(1)}" y="${m.t}" width="${(pw + 2).toFixed(1)}" height="${ph}"/></clipPath>
+      <clipPath id="${id}-up"><path d="${LN.fwd}L${R},${above}L${L},${above}Z"/></clipPath>
+      <clipPath id="${id}-dn"><path d="${LN.fwd}L${R},${below}L${L},${below}Z"/></clipPath>
+    </defs>`;
+    const band = `<g clip-path="url(#${id}-plot)">
+      <path class="f-add" d="${TP.fwd}${LN.back}Z" clip-path="url(#${id}-up)"/>
+      <path class="f-clr" d="${LN.fwd}${BT.back}Z" clip-path="url(#${id}-dn)"/>
+      <path class="l-open" d="${LN.fwd}"/>
+    </g>`;
+    const dots = `<circle class="dot-open" cx="${L}" cy="${yl[0].toFixed(2)}" r="4.5"/>
+      <circle class="dot-open" cx="${R}" cy="${yl[len - 1].toFixed(2)}" r="4.5"/>`;
+
+    // Both ends carry their own open count on a dashed leader from the top, so
+    // where the queue started and where it stands now read straight off the
+    // line rather than off the axis.
+    const pillY = m.t - 15;
+    const pillAt = (cx, cy, value) => {
+      const text = n(value), w = text.length * 8.4 + 18;
+      const px = Math.max(1, Math.min(W - w - 1, cx - w / 2));
+      return { px, w, svg: `<line class="lead" x1="${cx.toFixed(2)}" x2="${cx.toFixed(2)}" y1="${(pillY + 13).toFixed(1)}" y2="${Math.max(pillY + 13, cy - 6).toFixed(2)}"/>
+        <g class="pill pill-open"><rect x="${px.toFixed(1)}" y="${(pillY - 11).toFixed(1)}" width="${w.toFixed(1)}" height="22" rx="11"/>
+        <text x="${(px + w / 2).toFixed(1)}" y="${pillY.toFixed(1)}" dy="0.34em" text-anchor="middle">${esc(text)}</text></g>` };
     };
-    let ny = yn[len - 1], cy = yc[len - 1];
-    const newOnTop = agg.cumNew[len - 1] >= agg.cumClr[len - 1];
-    let upper = newOnTop ? ny : cy, lower = newOnTop ? cy : ny;
-    if (lower - upper < 26) { const mid = (upper + lower) / 2; upper = mid - 13; lower = mid + 13; }
-    upper -= 16; lower += 16;
-    upper = Math.max(m.t + 2, upper); lower = Math.min(base - 2, lower);
-    if (newOnTop) { ny = upper; cy = lower; } else { ny = lower; cy = upper; }
-    const pills = pill('pill-new', n(agg.cumNew[len - 1]), ny) + pill('pill-clr', n(agg.cumClr[len - 1]), cy);
+    const endPill = pillAt(xs[len - 1], yl[len - 1], lvl[len - 1]);
+    const startPill = pillAt(xs[0], yl[0], lvl[0]);
+    const pills = (len > 1 && startPill.px + startPill.w + 12 <= endPill.px ? startPill.svg : '') + endPill.svg;
 
     const hover = `<g class="hover" visibility="hidden">
         <line class="xhair" y1="${m.t}" y2="${base}"/>
-        <circle class="dot-clr hc" r="4"/><circle class="dot-new hn" r="4"/>
+        <circle class="dot-new ht" r="3.5"/><circle class="dot-clr hb" r="3.5"/><circle class="dot-open ho" r="4.5"/>
       </g>
       <rect class="hit" x="${m.l - 6}" y="${m.t}" width="${pw + 12}" height="${ph}"/>`;
 
-    const aria = `${label}: ${n(agg.added)} new and ${n(agg.cleared)} cleared from ${dayLabel(agg.start)} to ${dayLabel(agg.start + len - 1)}.`;
+    const aria = `${label}: items open at the end of each day, ${n(lvl[0])} on ${dayLabel(agg.start)} and ${n(lvl[len - 1])} on ${dayLabel(agg.start + len - 1)}. Over the range ${n(agg.added)} were added and ${n(agg.cleared)} cleared, drawn as a band above and below the line.`;
     host.setAttribute('role', 'img');
     host.setAttribute('aria-label', aria + ' Use the arrow keys to read individual days.');
-    host.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">${clip}${g}${fills}${lines}${pills}${hover}</svg><div class="tip" hidden></div>`;
+    host.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">${clip}${g}${band}${dots}${pills}${hover}</svg><div class="tip" hidden></div>`;
 
     const svg = host.querySelector('svg'), hv = svg.querySelector('.hover'), tip = host.querySelector('.tip');
-    const xh = hv.querySelector('.xhair'), hc = hv.querySelector('.hc'), hn = hv.querySelector('.hn');
+    const xh = hv.querySelector('.xhair'), ht = hv.querySelector('.ht'), hb = hv.querySelector('.hb'), ho = hv.querySelector('.ho');
     let cur = -1;
     const show = (i) => {
       cur = Math.max(0, Math.min(len - 1, i));
       const px = xs[cur];
       xh.setAttribute('x1', px); xh.setAttribute('x2', px);
-      hc.setAttribute('cx', px); hc.setAttribute('cy', yc[cur]);
-      hn.setAttribute('cx', px); hn.setAttribute('cy', yn[cur]);
+      ht.setAttribute('cx', px); ht.setAttribute('cy', y(tops[cur]));
+      hb.setAttribute('cx', px); hb.setAttribute('cy', y(bots[cur]));
+      ho.setAttribute('cx', px); ho.setAttribute('cy', yl[cur]);
       hv.setAttribute('visibility', 'visible');
       const net = agg.cumNew[cur] - agg.cumClr[cur];
       const delta = agg.dayNew[cur] - agg.dayClr[cur];
       tip.innerHTML = `<b>${esc(dayLabel(agg.start + cur, { weekday: 'short' }))}</b><table>
-        <tr><td></td><td>that day</td><td>in range</td></tr>
-        <tr class="k-new"><td>New</td><td>${n(agg.dayNew[cur])}</td><td>${n(agg.cumNew[cur])}</td></tr>
+        <tr class="k-open"><td>Open</td><td colspan="2">${n(lvl[cur])}</td></tr>
+        <tr class="k-head"><td></td><td>that day</td><td>in range</td></tr>
+        <tr class="k-new"><td>Added</td><td>${n(agg.dayNew[cur])}</td><td>${n(agg.cumNew[cur])}</td></tr>
         <tr class="k-clr"><td>Cleared</td><td>${n(agg.dayClr[cur])}</td><td>${n(agg.cumClr[cur])}</td></tr>
         <tr class="k-net"><td>Net</td><td class="${trend(delta)}">${signed(delta)}</td><td class="${trend(net)}">${signed(net)}</td></tr></table>`;
       tip.hidden = false;
@@ -648,7 +694,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       let left = px + 14;
       if (left + tw > W) left = px - tw - 14;
       tip.style.left = Math.max(0, left) + 'px';
-      tip.style.top = Math.max(0, Math.min(H - th, Math.min(yn[cur], yc[cur]) - th / 2)) + 'px';
+      tip.style.top = Math.max(0, Math.min(H - th, yl[cur] - th / 2)) + 'px';
     };
     const hide = () => { hv.setAttribute('visibility', 'hidden'); tip.hidden = true; cur = -1; };
     const fromEvent = (e) => {
@@ -668,7 +714,6 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     };
     host.onfocus = () => show(len - 1);
     host.onblur = hide;
-    return shrinks;
   }
 
   function drawNetChart(host, data, label) {
@@ -845,12 +890,11 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     const window = ratioWindow();
     const all = aggregate(items, b.start, b.end);
     renderKpis(all);
-    const shrinks = drawChart($('chart-all'), all, 'Total queue activity');
+    drawChart($('chart-all'), all, 'Total queue');
     $('ratio-all').innerHTML = ratioText(lastN(items, b.end, window), window);
-    $('legend-all').innerHTML = `<span><i class="sw" style="background:var(--new)"></i>New items</span>
-      <span><i class="sw" style="background:var(--cleared)"></i>Cleared</span>
-      <span><i class="sw box" style="background:var(--gap-fill)"></i>Net queue growth</span>
-      ${shrinks ? '<span><i class="sw box" style="background:var(--shrink-fill)"></i>Net queue shrink</span>' : ''}`;
+    $('legend-all').innerHTML = `<span><i class="sw" style="background:var(--open)"></i>Open at the end of the day</span>
+      <span><i class="sw box" style="background:var(--add-fill)"></i>Added that day (above the line)</span>
+      <span><i class="sw box" style="background:var(--clr-fill)"></i>Cleared that day (below the line)</span>`;
     drawNetChart($('chart-all-ratio'), dailyNet(items, b.start, b.end), 'Total queue');
     for (const code of ['p', 'w']) {
       const sub = items.filter((it) => it.lane === code);

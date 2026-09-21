@@ -1,6 +1,6 @@
 # OAS queue dashboard
 
-A read-only dashboard for the [open-anesthesia-sim](https://github.com/stuthedew/open-anesthesia-sim) docket: items added against items cleared, by lane, plus the branches in flight. A scheduled GitHub Actions workflow rebuilds the data every 15 minutes and publishes it with GitHub Pages. An open tab checks for new data every 5 minutes, so it stays current without reloading.
+A read-only dashboard for the [open-anesthesia-sim](https://github.com/stuthedew/open-anesthesia-sim) docket: the open queue day by day with what was added and cleared on each of them, by lane, plus the branches in flight. A scheduled GitHub Actions workflow rebuilds the data every 15 minutes and publishes it with GitHub Pages. An open tab checks for new data every 5 minutes, so it stays current without reloading.
 
 Nothing in open-anesthesia-sim refers to this repository. The workflow only clones it.
 
@@ -37,6 +37,8 @@ python3 -m http.server -d site 8000     # then open http://localhost:8000
 - **Days**: calendar days in the report's time zone (see above), so the newest column is today here, not today in UTC.
 - **New**: items whose `added:` date falls in the range. **Cleared**: `done` or `dropped` items whose `closed:` date falls in it. **Open**: `untriaged`, `ready`, `needs-decision` or `blocked`.
 - **Lanes** come from each item's `touches:` against `workflow_paths` in the project's `docket.toml`, the same test `docket next` uses.
+- **The open line** on each chart is the queue itself, not a running total: how many items stood open at the end of that day, counted from the item files rather than accumulated, so the last point is always the headline open count. The band above it is what was filed that day and the band below is what was cleared, so the line steps up wherever the upper band is thicker. An item with no `added:` date sits in the line from the first day of any range; one cleared without a `closed:` date, or carrying a status this page does not know, is left out of the line altogether, because an arrival whose departure cannot be placed in time would shift every earlier day by one. The banner flags unknown statuses when they appear.
+- **The y scale** starts at zero whenever the drawn band comes near it, and floats up off zero only when anchoring there would flatten a short range's bands into a sliver. The value at each end of the line is labeled, so the level reads without the axis.
 - **Branch readings** are docket's own `bin/docket flight` and `stranded` output. Every run cross-checks the open count against `bin/docket digest`, and the page flags a mismatch.
 
 ## Notes
