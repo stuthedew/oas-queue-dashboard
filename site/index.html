@@ -151,7 +151,6 @@ table.t th[aria-sort="descending"] .arrow::after { content: '\25BC'; }
 .chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12.5px; font-weight: 600; white-space: nowrap; background: var(--chip); color: var(--ink-2); }
 .chip.flight { background: var(--open-tint); color: var(--open-ink); }
 .chip.dup { background: var(--new-tint); color: var(--new-ink); }
-.chip.gen { background: var(--open-tint); color: var(--open-ink); }
 .chip.stranded { background: var(--warn-tint); color: var(--warn); }
 .tag { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
 .idlink { font-family: var(--mono); font-size: 12.5px; text-decoration: none; background: var(--chip); padding: 1px 6px; border-radius: 5px; white-space: nowrap; }
@@ -350,7 +349,6 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
             <th data-sort="state" tabindex="0"><span class="label">State</span><span class="arrow" aria-hidden="true"></span></th>
             <th data-sort="priority" tabindex="0"><span class="label">Priority</span><span class="arrow" aria-hidden="true"></span></th>
             <th data-sort="filed" tabindex="0"><span class="label">Filed</span><span class="arrow" aria-hidden="true"></span></th>
-            <th data-sort="rootcause" tabindex="0"><span class="label">Root cause of</span><span class="arrow" aria-hidden="true"></span></th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -360,7 +358,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
 
     <footer class="notes">
       <p>Cleared means done plus dropped, counted on the item's <code>closed:</code> date. New counts items by their <code>added:</code> date; items without one (the earliest, pre-field items) are carried in, not counted as new. Open is untriaged, ready, needs-decision or blocked. Lanes use each item's current <code>touches:</code> against <code>docket.toml</code> <code>workflow_paths</code>, the same test <code>docket next</code> uses; the total also includes crossing and unplaced items. Dates are as written in the item files, and the last day is partial.</p>
-      <p><strong>Filed</strong> is how many times the issue has come up: the item itself plus each capture <code>bin/docket new</code> matched to it and a session let stand, read from <code>recurrences:</code>. A match a session later judged wrong is marked <code>withdrawn</code> in the file and counts for nothing here, and one capture recorded twice counts once. <strong>Root cause of</strong> is how many items an item's <code>root-cause-of:</code> names, after its own id and any id no item in the store carries are dropped; at three or more docket reads the claim as a generator, and below that as an ordinary item.</p>
+      <p><strong>Filed</strong> is how many times the issue has come up: the item itself plus each capture <code>bin/docket new</code> matched to it and a session let stand, read from <code>recurrences:</code>. A match a session later judged wrong is marked <code>withdrawn</code> in the file and counts for nothing here, and one capture recorded twice counts once.</p>
       <p id="foot-source"></p>
       <p id="foot-check"></p>
       <div class="actions">
@@ -432,12 +430,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
   };
   // Which direction a column starts in on its first click: newest-first for
   // dates, highest-priority-first for priority, A-Z for the text columns.
-  const SORT_DEFAULT_DIR = { date: 'desc', item: 'asc', lane: 'asc', state: 'asc', priority: 'asc', filed: 'desc', rootcause: 'desc' };
-  // What `root-cause-of:` has to resolve to before the claim is a generator
-  // rather than an ordinary item, from docket's own MIN_ROOT_CAUSE_ITEMS.
-  // extract.py has already dropped the item's own id and any that no item in
-  // the store carries, so the length here is what docket would count.
-  const MIN_ROOT_CAUSE_ITEMS = 3;
+  const SORT_DEFAULT_DIR = { date: 'desc', item: 'asc', lane: 'asc', state: 'asc', priority: 'asc', filed: 'desc' };
   const timesFiled = (it) => it.recurrences.length + 1;
 
   /* ---------- data ---------- */
@@ -453,7 +446,6 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       // this item and that a session let stand. The item is itself the first
       // filing, so it has been filed recurrences.length + 1 times.
       recurrences: r[at.recurrences] || [],
-      rootCauses: r[at.root_causes] || [],
     }));
     return { meta, items };
   }
@@ -884,7 +876,6 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     if (stale) problems.push(`No refresh for ${esc(ago(gen).replace(' ago', ''))}, against a ${every}-minute schedule. GitHub runs schedules on a best-effort basis and switches them off after 60 days without repository activity.${wf ? ` <a href="${esc(wf)}" target="_blank" rel="noopener noreferrer">Check the workflow</a>.` : ''}`);
     if (ck.docket_open != null && ck.docket_open !== ck.extractor_open) problems.push(`Open count differs from docket's own digest (${n(ck.extractor_open)} here, ${n(ck.docket_open)} in docket). The item format may have changed; extract.py needs a look.`);
     if ((ck.unknown_statuses || []).length) problems.push(`Unrecognised statuses in the store: ${ck.unknown_statuses.map(esc).join(', ')}. Those items are counted neither open nor cleared.`);
-    if (ck.unresolved_root_causes) problems.push(`${n(ck.unresolved_root_causes)} item${ck.unresolved_root_causes === 1 ? '' : 's'} name a <code>root-cause-of:</code> id no item in the store carries. Those ids are left out of the Root cause of column, so a generator claim reads short until the typo is fixed; <code>docket check</code> reports the same thing.`);
     const banner = $('banner');
     banner.innerHTML = problems.length ? `<div><strong>Check this.</strong> ${problems.join(' ')}</div>` : '';
     banner.hidden = !problems.length;
@@ -1026,7 +1017,6 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       else if (state.sortKey === 'state') cmp = a.status.localeCompare(z.status) * mul;
       else if (state.sortKey === 'priority') cmp = (prioRank(a) - prioRank(z)) * mul;
       else if (state.sortKey === 'filed') cmp = (timesFiled(a) - timesFiled(z)) * mul;
-      else if (state.sortKey === 'rootcause') cmp = (a.rootCauses.length - z.rootCauses.length) * mul;
       return cmp || z.id.localeCompare(a.id);
     };
     const sortFn = state.sortKey ? columnSort : defaultSort;
@@ -1059,7 +1049,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       const d = state.list === 'cleared' ? it.closed : it.added;
       const st = CLOSED.includes(it.status) ? it.status : it.status.replace('-', ' ');
       const prio = it.status === 'untriaged' ? '—' : (it.priority || '—');
-      const filed = timesFiled(it), rc = it.rootCauses.length;
+      const filed = timesFiled(it);
       return `<tr>
         <td class="num" style="white-space:nowrap">${d != null ? esc(dayLabel(d)) : '<span class="tag">undated</span>'}</td>
         <td class="title-cell"><a class="idlink" href="${esc(repo)}/blob/main/docs/items/${encodeURIComponent(it.file)}" target="_blank" rel="noopener noreferrer">${esc(it.id)}</a>
@@ -1070,11 +1060,8 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
         <td data-label="Filed" class="${filed > 1 ? '' : 'quiet'}" style="white-space:nowrap">${filed > 1
           ? `<span class="chip dup" title="${esc('Filed ' + filed + ' times. Later captures: ' + recurrenceNote(it.recurrences))}">${n(filed)}\u00d7</span>`
           : '<span class="tag">1\u00d7</span>'}</td>
-        <td data-label="Root cause of" class="${rc ? '' : 'quiet'}" style="white-space:nowrap">${rc
-          ? `<span class="chip${rc >= MIN_ROOT_CAUSE_ITEMS ? ' gen' : ''}" title="${esc((rc >= MIN_ROOT_CAUSE_ITEMS ? 'A generator: the root cause of ' : 'Names fewer than ' + MIN_ROOT_CAUSE_ITEMS + ' items, so docket reads it as an ordinary item. Root cause of ') + it.rootCauses.join(', '))}">${n(rc)}</span>`
-          : '<span class="tag">\u2014</span>'}</td>
       </tr>`;
-    }).join('') || '<tr class="empty-row"><td colspan="7">Nothing matches. Widen the range, switch lanes or clear the filter.</td></tr>';
+    }).join('') || '<tr class="empty-row"><td colspan="6">Nothing matches. Widen the range, switch lanes or clear the filter.</td></tr>';
     const more = $('more');
     more.hidden = rows.length <= 40;
     more.textContent = state.showAll ? 'Show the first 40' : `Show all ${n(rows.length)}`;
