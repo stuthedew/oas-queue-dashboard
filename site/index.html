@@ -325,9 +325,9 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       </div>
       <div class="controls">
         <div class="seg" role="group" aria-label="Which items">
-          <button type="button" data-list="added" aria-pressed="true">Added</button>
+          <button type="button" data-list="added" aria-pressed="false">Added</button>
           <button type="button" data-list="cleared" aria-pressed="false">Cleared</button>
-          <button type="button" data-list="open" aria-pressed="false">Open now</button>
+          <button type="button" data-list="open" aria-pressed="true">Open now</button>
         </div>
         <label class="vh" for="lane-filter">Lane</label>
         <select id="lane-filter">
@@ -425,7 +425,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
 
   const state = {
     meta: null, items: [], byId: new Map(),
-    range: pref.get('range', 'all'), list: 'added', lane: 'all', query: '', showAll: false,
+    range: pref.get('range', 'all'), list: 'open', lane: 'all', query: '', showAll: false,
     sortKey: null, sortDir: null,
   };
   // Which direction a column starts in on its first click: newest-first for
