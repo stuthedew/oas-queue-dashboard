@@ -395,7 +395,28 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     if (s < 48 * 3600) return Math.round(s / 3600) + ' h ago';
     return Math.round(s / 86400) + ' d ago';
   };
-  const clock = (ms) => new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+  // Every "day" on this page is a calendar day in the report's own zone --
+  // not UTC, and not the viewer's. Item `added:`/`closed:` are bare calendar
+  // dates written in that zone, and UTC rolls over mid-evening in the US, so
+  // reading "today" off UTC opens tomorrow's bar while it is still today here.
+  const FALLBACK_TZ = 'America/Chicago';
+  const tzParts = (tz, ms, opts) => new Intl.DateTimeFormat('en-US', { timeZone: tz, ...opts }).formatToParts(new Date(ms));
+  const reportTz = () => {
+    const tz = state.meta && state.meta.report_timezone;
+    if (typeof tz !== 'string' || !tz) return FALLBACK_TZ; // an absent zone would silently mean the viewer's
+    try { tzParts(tz, 0, {}); return tz; } catch (e) { return FALLBACK_TZ; }
+  };
+  // The calendar day an instant falls on, as a day number dayOf() can compare.
+  const dayIn = (ms) => {
+    const p = Object.fromEntries(tzParts(reportTz(), ms, { year: 'numeric', month: '2-digit', day: '2-digit' }).map((x) => [x.type, x.value]));
+    return dayOf(`${p.year}-${p.month}-${p.day}`);
+  };
+  const tzLabel = (ms) => {
+    const tz = reportTz();
+    const abbr = (tzParts(tz, ms, { timeZoneName: 'short' }).find((x) => x.type === 'timeZoneName') || {}).value;
+    return abbr && abbr !== tz ? `${tz} (${abbr})` : tz;
+  };
+  const clock = (ms) => new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: reportTz(), timeZoneName: 'short' });
 
   const state = {
     meta: null, items: [], byId: new Map(),
@@ -425,7 +446,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       if (it.added != null) { first = Math.min(first, it.added); last = Math.max(last, it.added); }
       if (it.closed != null) last = Math.max(last, it.closed);
     }
-    last = Math.max(last, Math.floor(Date.parse(state.meta.generated_at) / DAY));
+    last = Math.max(last, dayIn(Date.parse(state.meta.generated_at)));
     if (!isFinite(first)) first = last;
     const span = state.range === 'all' ? Infinity : Number(state.range);
     const start = span === Infinity ? first : Math.max(first, last - span + 1);
@@ -788,7 +809,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     const { meta } = state;
     const gen = Date.parse(meta.generated_at);
     const every = Number(meta.interval_minutes) || 15;
-    $('title').textContent = 'Queue report for ' + new Date(gen).toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+    $('title').textContent = 'Queue report for ' + dayLabel(dayIn(gen), { month: 'long', day: 'numeric' });
     const long = { month: 'long', day: 'numeric' };
     $('subtitle').textContent = `Open Anesthesia Sim, ${dayLabel(b.start, long)} to ${dayLabel(b.end, { ...long, year: 'numeric' })}`;
     const stale = Date.now() - gen > Math.max(3 * every, 30) * 60000;
@@ -985,7 +1006,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     const dash = meta.dashboard_repo ? `https://github.com/${meta.dashboard_repo}` : '';
     const ext = dash ? `<a href="${esc(dash)}/blob/main/extract.py" target="_blank" rel="noopener noreferrer">extract.py</a>` : 'extract.py';
     const run = meta.build_run_url ? ` in <a href="${esc(meta.build_run_url)}" target="_blank" rel="noopener noreferrer">this workflow run</a>` : '';
-    $('foot-source').innerHTML = `Source: <a href="${esc(meta.repo_url)}" target="_blank" rel="noopener noreferrer">${esc(meta.repo_url.replace('https://', ''))}</a>, ${esc(meta.base_ref)} at <span class="mono">${esc(meta.sha.slice(0, 7))}</span> (committed ${esc(clock(Date.parse(meta.commit_time)))}), ${n(meta.item_count)} item files, read ${esc(clock(gen))} by ${ext} v${esc(meta.extractor_version)}${run}.`;
+    $('foot-source').innerHTML = `Source: <a href="${esc(meta.repo_url)}" target="_blank" rel="noopener noreferrer">${esc(meta.repo_url.replace('https://', ''))}</a>, ${esc(meta.base_ref)} at <span class="mono">${esc(meta.sha.slice(0, 7))}</span> (committed ${esc(clock(Date.parse(meta.commit_time)))}), ${n(meta.item_count)} item files, read ${esc(clock(gen))} by ${ext} v${esc(meta.extractor_version)}${run}. Days are calendar days in ${esc(tzLabel(gen))}.`;
     const ck = meta.check || {};
     $('foot-check').innerHTML = ck.docket_open == null
       ? '<span class="check-bad">docket digest did not run, so the open count was not cross-checked.</span>'
