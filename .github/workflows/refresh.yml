@@ -15,6 +15,10 @@ on:
 
 env:
   INTERVAL_MINUTES: "15"
+  # The zone the page calls a "day". Item dates are bare calendar dates written
+  # in this zone, so reading "today" off the runner's UTC clock would open
+  # tomorrow's column mid-evening. Any IANA zone name works.
+  REPORT_TIMEZONE: "America/Chicago"
 
 permissions:
   contents: read
@@ -32,7 +36,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Snapshot the docket
-        run: python3 extract.py --out site/data --interval-minutes "$INTERVAL_MINUTES"
+        run: python3 extract.py --out site/data --interval-minutes "$INTERVAL_MINUTES" --timezone "$REPORT_TIMEZONE"
       - uses: actions/upload-pages-artifact@v5
         with:
           path: site

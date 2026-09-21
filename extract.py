@@ -10,6 +10,7 @@ Counting rules (they reproduce the 2026-09-13 queue report exactly at 6cd1a1d):
   new      = item whose `added:` date falls in the range
   cleared  = item with status done or dropped whose `closed:` date falls in it
   open     = status untriaged, ready, needs-decision or blocked
+  today    = the calendar day in --timezone (default America/Chicago), not UTC
   lane     = every `touches` path under docket.toml workflow_paths -> workflow,
              none -> product, some -> crossing, no touches -> unplaced
              (the same test `docket next` uses, via Item.lane)
@@ -33,7 +34,11 @@ import tempfile
 import tomllib
 from pathlib import Path
 
-EXTRACTOR_VERSION = 2
+EXTRACTOR_VERSION = 3
+# The zone the page calls a "day". Item `added:`/`closed:` are bare calendar
+# dates, so the report only reads as one clock if "today" is that same zone
+# rather than UTC, which rolls over mid-evening in the US.
+DEFAULT_TIMEZONE = "America/Chicago"
 REPO_URL = "https://github.com/stuthedew/open-anesthesia-sim"
 BASE_REF = "origin/main"
 
@@ -199,6 +204,7 @@ def snapshot(repo: Path, args: argparse.Namespace) -> dict:
         "refresh_id": f"{sha[:7]}-{now.strftime('%Y%m%dT%H%M%SZ')}",
         "generated_at": now.isoformat().replace("+00:00", "Z"),
         "interval_minutes": args.interval_minutes,
+        "report_timezone": args.timezone,
         "dashboard_repo": args.dashboard_repo, "workflow_file": args.workflow_file,
         "build_run_url": run_url,
         "repo_url": REPO_URL, "base_ref": BASE_REF, "sha": sha,
@@ -216,6 +222,18 @@ def snapshot(repo: Path, args: argparse.Namespace) -> dict:
     return {"meta": meta, "rows": rows}
 
 
+def check_timezone(name: str) -> None:
+    """Fail here on a bad zone name rather than silently in the browser."""
+    try:
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+    except ImportError:  # no tzdata on this machine; the page resolves it anyway
+        return
+    try:
+        ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        raise SystemExit(f"--timezone {name!r} is not an IANA zone name: {exc}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--out", default="site/data", help="directory for snapshot.json")
@@ -225,7 +243,10 @@ def main() -> int:
     ap.add_argument("--workflow-file", default="refresh.yml")
     ap.add_argument("--interval-minutes", type=int, default=15,
                     help="the schedule's cadence, so the page knows when data is late")
+    ap.add_argument("--timezone", default=os.environ.get("REPORT_TIMEZONE") or DEFAULT_TIMEZONE,
+                    help=f"IANA zone the page draws days in (default {DEFAULT_TIMEZONE})")
     args = ap.parse_args()
+    check_timezone(args.timezone)
 
     with tempfile.TemporaryDirectory(prefix="oas-") as tmp:
         repo = Path(args.workdir or Path(tmp) / "open-anesthesia-sim")

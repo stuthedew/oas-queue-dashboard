@@ -19,6 +19,12 @@ The site appears at `https://<your-username>.github.io/oas-queue-dashboard/` whe
 
 Edit the first `cron` line in `.github/workflows/refresh.yml`, and set `INTERVAL_MINUTES` in the same file to match; the page uses it to decide when data is late. GitHub's shortest schedule is every 5 minutes, and scheduled runs are best effort: they can start late, especially near the top of the hour.
 
+## Change the report's time zone
+
+Days on this page are calendar days in `REPORT_TIMEZONE` in `.github/workflows/refresh.yml`, which defaults to `America/Chicago`. Set it to any IANA zone name (`--timezone` does the same when running `extract.py` by hand); a name the zone database does not know stops the run before it clones anything. The page shows the zone in its footer.
+
+The workflow runs on UTC, so without this the report's "today" would start mid-evening Central and a day's column would open before that day began here. Item `added:` and `closed:` dates are bare calendar dates carrying no zone of their own, so this setting decides only which day is the last one on the chart and in the header, not how an individual item is dated.
+
 ## Preview locally
 
 ```sh
@@ -28,6 +34,7 @@ python3 -m http.server -d site 8000     # then open http://localhost:8000
 
 ## How it counts
 
+- **Days**: calendar days in the report's time zone (see above), so the newest column is today here, not today in UTC.
 - **New**: items whose `added:` date falls in the range. **Cleared**: `done` or `dropped` items whose `closed:` date falls in it. **Open**: `untriaged`, `ready`, `needs-decision` or `blocked`.
 - **Lanes** come from each item's `touches:` against `workflow_paths` in the project's `docket.toml`, the same test `docket next` uses.
 - **Branch readings** are docket's own `bin/docket flight` and `stranded` output. Every run cross-checks the open count against `bin/docket digest`, and the page flags a mismatch.
