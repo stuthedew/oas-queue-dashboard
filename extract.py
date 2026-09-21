@@ -10,6 +10,10 @@ Counting rules (they reproduce the 2026-09-13 queue report exactly at 6cd1a1d):
   new      = item whose `added:` date falls in the range
   cleared  = item with status done or dropped whose `closed:` date falls in it
   open     = status untriaged, ready, needs-decision or blocked
+  filed    = 1 + the distinct live entries in `recurrences:`, since the item is
+             itself the first filing
+  generator= `root-cause-of:` resolving to MIN_ROOT_CAUSE_ITEMS (3) or more
+             distinct items in this store, the item's own id excluded
   today    = the calendar day in --timezone (default America/Chicago), not UTC
   lane     = every `touches` path under docket.toml workflow_paths -> workflow,
              none -> product, some -> crossing, no touches -> unplaced
@@ -34,7 +38,7 @@ import tempfile
 import tomllib
 from pathlib import Path
 
-EXTRACTOR_VERSION = 3
+EXTRACTOR_VERSION = 4
 # The zone the page calls a "day". Item `added:`/`closed:` are bare calendar
 # dates, so the report only reads as one clock if "today" is that same zone
 # rather than UTC, which rolls over mid-evening in the US.
@@ -52,7 +56,14 @@ ID_ALPHABET = "0123456789BCDFGHJKLMNPQRSTVWXYZ"
 ID_RE = re.compile(rf"\bPL-(?:[{ID_ALPHABET}]{{4}}|\d{{3}})(?![{ID_ALPHABET}])", re.IGNORECASE)
 LANE_CODES = {"product": "p", "workflow": "w", "crossing": "c", "unplaced": "u"}
 ITEM_COLUMNS = ["id", "title", "status", "priority", "effort", "lane", "added",
-                "closed", "classes", "feature", "pr", "file"]
+                "closed", "classes", "feature", "pr", "file", "recurrences",
+                "root_causes"]
+# What `root-cause-of:` has to resolve to before the claim is a generator
+# rather than an ordinary item, from docket's own MIN_ROOT_CAUSE_ITEMS.
+MIN_ROOT_CAUSE_ITEMS = 3
+# The word that disowns a recorded filing, written between the entry and the
+# withdrawal that takes it back: `2026-09-20 PL-S8JT withdrawn 2026-09-21 PL-34BG`.
+WITHDRAWN_MARKER = "withdrawn"
 
 
 def git(repo: Path, *args: str, check: bool = True) -> str:
@@ -96,6 +107,34 @@ def is_under(path: str, roots: tuple[str, ...]) -> bool:
     return False
 
 
+def live_recurrences(value: str) -> list[str]:
+    """The distinct filings this item absorbed, each as "<date> <id>".
+
+    Mirrors docket's `model.live_recurrences` and `model.recurrence_count`. An
+    entry reads `DATE PL-XXXX`, optionally disowned by a `withdrawn DATE
+    PL-XXXX` tail. A withdrawn entry records a match that was made and then
+    taken back, so it stays in the file and out of the count; a tail that does
+    not read as exactly those three words leaves the entry live, which is the
+    direction that fails loudly rather than quietly cancelling a filing. An
+    entry naming no id counts for nothing, and one capture recorded twice
+    names one filing.
+
+    The item is itself the first filing, so the page shows len() + 1.
+    """
+    found: list[str] = []
+    seen: set[str] = set()
+    for entry in split_list(value):
+        parts = entry.split()
+        identifier = parts[1] if len(parts) > 1 else ""
+        tail = parts[2:]
+        withdrawn = len(tail) == 3 and tail[0] == WITHDRAWN_MARKER and bool(iso_date(tail[1])) and bool(tail[2])
+        if withdrawn or not identifier or identifier in seen:
+            continue
+        seen.add(identifier)
+        found.append(f"{iso_date(parts[0])} {identifier}".strip())
+    return found
+
+
 def lane(touches: list[str], workflow_paths: tuple[str, ...]) -> str:
     if not workflow_paths or not touches:
         return "unplaced"
@@ -107,7 +146,15 @@ def lane(touches: list[str], workflow_paths: tuple[str, ...]) -> str:
     return "crossing"
 
 
-def read_items(repo: Path, items_dir: str, workflow_paths: tuple[str, ...]) -> list[list]:
+def read_items(repo: Path, items_dir: str, workflow_paths: tuple[str, ...]) -> tuple[list[list], int]:
+    """Every item as a row, plus how many carry an unresolvable root-cause claim.
+
+    `root-cause-of:` is resolved here rather than on the page, because only
+    this side holds every id the store carries. Mirrors docket's
+    `model.root_cause_faults`: counted over distinct ids with the item's own
+    removed, and an id no item carries drops out of the count and is reported
+    instead, so a typo cannot quietly shrink a generator claim.
+    """
     rows = []
     for path in sorted((repo / items_dir).glob("*.md")):
         if path.name == "README.md":
@@ -119,8 +166,18 @@ def read_items(repo: Path, items_dir: str, workflow_paths: tuple[str, ...]) -> l
             LANE_CODES[lane(split_list(f.get("touches", "")), workflow_paths)],
             iso_date(f.get("added", "")), iso_date(f.get("closed", "")),
             split_list(f.get("classes", "")), f.get("feature", ""), f.get("pr", ""), path.name,
+            live_recurrences(f.get("recurrences", "")),
+            split_list(f.get("root-cause-of", "")),
         ])
-    return rows
+    known = {r[0] for r in rows if r[0]}
+    at_rc = ITEM_COLUMNS.index("root_causes")
+    unresolved = 0
+    for row in rows:
+        named = list(dict.fromkeys(row[at_rc]))
+        if any(i != row[0] and i not in known for i in named):
+            unresolved += 1
+        row[at_rc] = [i for i in named if i != row[0] and i in known]
+    return rows, unresolved
 
 
 def docket(repo: Path, *args: str) -> str:
@@ -190,7 +247,7 @@ def snapshot(repo: Path, args: argparse.Namespace) -> dict:
     commit_time, _, commit_subject = git(repo, "log", "-1", "--format=%cI%x09%s", BASE_REF).strip().partition("\t")
     cfg = tomllib.loads((repo / "docket.toml").read_text(encoding="utf-8")).get("docket", {})
     workflow_paths = tuple(cfg.get("workflow_paths", ()))
-    rows = read_items(repo, cfg.get("items_dir", "docs/items"), workflow_paths)
+    rows, unresolved_root_causes = read_items(repo, cfg.get("items_dir", "docs/items"), workflow_paths)
 
     digest = docket(repo, "digest")
     m = re.search(r"Docket:\s+(\d+)\s+open", digest)
@@ -213,7 +270,8 @@ def snapshot(repo: Path, args: argparse.Namespace) -> dict:
         "workflow_paths_count": len(workflow_paths),
         "check": {"extractor_open": extractor_open,
                   "docket_open": int(m.group(1)) if m else None,
-                  "unknown_statuses": sorted({r[2] for r in rows} - set(OPEN_STATUSES) - set(CLOSED_STATUSES))},
+                  "unknown_statuses": sorted({r[2] for r in rows} - set(OPEN_STATUSES) - set(CLOSED_STATUSES)),
+                  "unresolved_root_causes": unresolved_root_causes},
         "branches": branch_facts(repo),
         "flight": parse_flight(docket(repo, "flight")),
         "stranded": parse_stranded(docket(repo, "stranded")),
@@ -267,8 +325,14 @@ def main() -> int:
           f"{check['extractor_open']} open; docket digest says {check['docket_open']} "
           f"-> {'match' if ok else 'MISMATCH'}; {len(meta['branches'])} branches, "
           f"{len(meta['flight'])} in flight; wrote {target} ({target.stat().st_size / 1024:.0f} KB)")
+    at_rec, at_rc = ITEM_COLUMNS.index("recurrences"), ITEM_COLUMNS.index("root_causes")
+    refiled = sum(1 for r in snap["rows"] if r[at_rec])
+    generators = sum(1 for r in snap["rows"] if len(r[at_rc]) >= MIN_ROOT_CAUSE_ITEMS)
+    print(f"{refiled} items filed more than once, {generators} generators")
     if check["unknown_statuses"]:
         print(f"WARNING: statuses this extractor does not know: {check['unknown_statuses']}")
+    if check["unresolved_root_causes"]:
+        print(f"WARNING: {check['unresolved_root_causes']} item(s) name a root cause this store does not carry")
     return 0
 
 
