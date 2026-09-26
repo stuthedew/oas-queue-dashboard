@@ -289,6 +289,26 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     </div>
     <p class="also num" id="also"></p>
 
+    <div class="lanes">
+      <section class="panel lane">
+        <h2>Product lane defects</h2>
+        <p class="panel-sub num" id="sub-dp"></p>
+        <p class="ratio" id="ratio-dp"></p>
+        <div class="chart" id="chart-dp" data-height="230" tabindex="0"></div>
+        <h3 class="chart-title">Filed minus cleared, by day</h3>
+        <div class="chart" id="chart-dp-ratio" data-height="150" tabindex="0"></div>
+      </section>
+      <section class="panel lane">
+        <h2>Workflow lane defects</h2>
+        <p class="panel-sub num" id="sub-dw"></p>
+        <p class="ratio" id="ratio-dw"></p>
+        <div class="chart" id="chart-dw" data-height="230" tabindex="0"></div>
+        <h3 class="chart-title">Filed minus cleared, by day</h3>
+        <div class="chart" id="chart-dw-ratio" data-height="150" tabindex="0"></div>
+      </section>
+    </div>
+    <p class="also num" id="also-d"></p>
+
     <section class="panel">
       <div class="panel-head">
         <div>
@@ -358,6 +378,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
 
     <footer class="notes">
       <p>Cleared means done plus dropped, counted on the item's <code>closed:</code> date. New counts items by their <code>added:</code> date; items without one (the earliest, pre-field items) are carried in, not counted as new. Open is untriaged, ready, needs-decision or blocked. Lanes use each item's current <code>touches:</code> against <code>docket.toml</code> <code>workflow_paths</code>, the same test <code>docket next</code> uses; the total also includes crossing and unplaced items. Dates are as written in the item files, and the last day is partial.</p>
+      <p><strong>Defects</strong> are items whose <code>classes:</code> include <code>defect</code>, docket's label for a bug, whatever else they carry: <code>defect, safety</code> counts, and <code>safety</code> or <code>science</code> alone does not. The defect charts follow the lane charts' rules over each item's current classes. A capture carries no classes until it is triaged, so a new defect joins them on its <code>added:</code> date once triage classes it, and the latest days can rise after the fact.</p>
       <p><strong>Filed</strong> is how many times the issue has come up: the item itself plus each capture <code>bin/docket new</code> matched to it and a session let stand, read from <code>recurrences:</code>. A match a session later judged wrong is marked <code>withdrawn</code> in the file and counts for nothing here, and one capture recorded twice counts once.</p>
       <p id="foot-source"></p>
       <p id="foot-check"></p>
@@ -432,6 +453,11 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
   // dates, highest-priority-first for priority, A-Z for the text columns.
   const SORT_DEFAULT_DIR = { date: 'desc', item: 'asc', lane: 'asc', state: 'asc', priority: 'asc', filed: 'desc' };
   const timesFiled = (it) => it.recurrences.length + 1;
+  // docket's label for a bug is the class `defect`, and it alone decides: an
+  // item carrying it counts whatever else it carries (`defect, safety` does),
+  // and `safety` or `science` without it does not, any more than housekeeping
+  // or feature work. A plain membership test, as docket reads classes.
+  const isDefect = (it) => it.classes.includes('defect');
 
   /* ---------- data ---------- */
   function assemble(snap) {
@@ -905,20 +931,27 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       <span><i class="sw box" style="background:var(--add-fill)"></i>Added that day (above the line)</span>
       <span><i class="sw box" style="background:var(--clr-fill)"></i>Cleared that day (below the line)</span>`;
     drawNetChart($('chart-all-ratio'), dailyNet(items, b.start, b.end), 'Total queue');
-    for (const code of ['p', 'w']) {
-      const sub = items.filter((it) => it.lane === code);
-      const agg = aggregate(sub, b.start, b.end);
-      $('sub-' + code).textContent = `${n(agg.added)} new, ${n(agg.cleared)} cleared, ${n(agg.open)} open`;
-      $('ratio-' + code).innerHTML = ratioText(lastN(sub, b.end, window), window);
-      drawChart($('chart-' + code), agg, LANE_NAME[code] + ' lane');
-      drawNetChart($('chart-' + code + '-ratio'), dailyNet(sub, b.start, b.end), LANE_NAME[code] + ' lane');
+    // The two lanes over every item, then the same two over defects alone
+    // (ids carrying a "d": chart-dp, sub-dw, ...), drawn by the same rules.
+    const defects = items.filter(isDefect);
+    for (const [pre, pool, what] of [['', items, ' lane'], ['d', defects, ' lane defects']]) {
+      for (const code of ['p', 'w']) {
+        const sub = pool.filter((it) => it.lane === code);
+        const agg = aggregate(sub, b.start, b.end);
+        const key = pre + code;
+        $('sub-' + key).textContent = `${n(agg.added)} new, ${n(agg.cleared)} cleared, ${n(agg.open)} open`;
+        $('ratio-' + key).innerHTML = ratioText(lastN(sub, b.end, window), window);
+        drawChart($('chart-' + key), agg, LANE_NAME[code] + what);
+        drawNetChart($('chart-' + key + '-ratio'), dailyNet(sub, b.start, b.end), LANE_NAME[code] + what);
+      }
     }
-    const also = ['c', 'u'].map((code) => {
-      const agg = aggregate(items.filter((it) => it.lane === code), b.start, b.end);
+    const also = (pool) => ['c', 'u'].map((code) => {
+      const agg = aggregate(pool.filter((it) => it.lane === code), b.start, b.end);
       return `${LANE_NAME[code].toLowerCase()} ${n(agg.added)} new, ${n(agg.cleared)} cleared, ${n(agg.open)} open`;
-    });
-    $('also').textContent = `Also in the total: ${also.join('; ')}. Crossing items touch both halves; unplaced items declare no touches.`;
-    ['chart-all', 'chart-p', 'chart-w', 'chart-all-ratio', 'chart-p-ratio', 'chart-w-ratio']
+    }).join('; ');
+    $('also').textContent = `Also in the total: ${also(items)}. Crossing items touch both halves; unplaced items declare no touches.`;
+    $('also-d').textContent = `Also classed defect, in neither lane: ${also(defects)}. An item counts as a defect when its classes include defect, whatever else they carry; safety or science alone does not.`;
+    ['chart-all', 'chart-p', 'chart-w', 'chart-dp', 'chart-dw', 'chart-all-ratio', 'chart-p-ratio', 'chart-w-ratio', 'chart-dp-ratio', 'chart-dw-ratio']
       .forEach((id) => { const el = $(id); el._w = el.clientWidth; ro.observe(el); });
   }
 
@@ -1104,10 +1137,10 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     const open = items.filter((i) => OPEN.includes(i.status));
     const c = (pred) => open.filter(pred).length;
     const repeats = open.filter((i) => timesFiled(i) > 1).sort((a, z) => timesFiled(z) - timesFiled(a));
-    const lanes = ['p', 'w', 'c', 'u'].map((code) => {
-      const a = aggregate(items.filter((i) => i.lane === code), b.start, b.end);
+    const lanes = (pool) => ['p', 'w', 'c', 'u'].map((code) => {
+      const a = aggregate(pool.filter((i) => i.lane === code), b.start, b.end);
       return `${LANE_NAME[code].toLowerCase()} ${a.added} new / ${a.cleared} cleared / ${a.open} open`;
-    });
+    }).join('; ');
     const branches = branchRows().map((r) => {
       const what = { flight: 'in flight', stranded: 'items only here', none: 'nothing main lacks' }[r.reading];
       return `  - ${r.name}: ${what}${r.ids.length ? ' [' + r.ids.join(', ') + ']' : ''}, last commit ${ago(Date.parse(r.last))}`;
@@ -1119,7 +1152,8 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       `Open by status: ready ${c((i) => i.status === 'ready')}, needs-decision ${c((i) => i.status === 'needs-decision')}, blocked ${c((i) => i.status === 'blocked')}, untriaged ${c((i) => i.status === 'untriaged')}`,
       `Open by priority: P0 ${c((i) => i.status !== 'untriaged' && i.priority === 'P0')}, P1 ${c((i) => i.status !== 'untriaged' && i.priority === 'P1')}, P2 ${c((i) => i.status !== 'untriaged' && i.priority === 'P2')}, P3 ${c((i) => i.status !== 'untriaged' && i.priority === 'P3')}`,
       `Open items filed more than once: ${repeats.length ? repeats.map((i) => `${i.id} ${timesFiled(i)}x`).join(', ') : 'none'}`,
-      `By lane over the range: ${lanes.join('; ')}`,
+      `By lane over the range: ${lanes(items)}`,
+      `Defects (classed defect) by lane over the range: ${lanes(items.filter(isDefect))}`,
       `Branches besides main (docket flight/stranded reading):`,
       ...(branches.length ? branches : ['  - none']),
     ].join('\n');
