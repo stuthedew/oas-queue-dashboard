@@ -115,6 +115,10 @@ button { font: inherit; color: inherit; }
 .chart .bar-label { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .chart .lbl-new { fill: var(--new-ink); } .chart .lbl-clr { fill: var(--cleared-ink); }
 .chart .ref { stroke: var(--ink-2); stroke-width: 1.25; stroke-dasharray: 4 4; }
+.chart .l-cum-new { fill: none; stroke: var(--new); stroke-width: 2.5; stroke-linejoin: round; }
+.chart .l-cum-clr { fill: none; stroke: var(--cleared); stroke-width: 2.5; stroke-linejoin: round; }
+.chart .f-gap { fill: var(--open); opacity: 0.12; }
+.chart .end-lbl { font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .chart .ref-label { fill: var(--ink-2); text-anchor: start; font-weight: 700; }
 .chart-title { font-size: 16px; font-weight: 700; margin: 18px 0 4px; }
 .chart .xhair { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 3 3; }
@@ -174,6 +178,18 @@ pre { white-space: pre-wrap; word-break: break-word; font-family: var(--mono); f
 .comp-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .comp-legend i { width: 10px; height: 10px; border-radius: 3px; background: var(--open); display: inline-block; }
 
+/* Defects by feature */
+table.feat-t td, table.feat-t th { padding: 6px 8px 6px 4px; }
+table.feat-t .feat { max-width: 22ch; overflow-wrap: anywhere; }
+table.feat-t .fbar { min-width: 120px; white-space: nowrap; }
+table.feat-t .fb { display: inline-block; vertical-align: middle; width: calc(100% - 3.2em); min-width: 60px; height: 10px; border-radius: 5px; background: var(--paper); overflow: hidden; margin-right: 6px; }
+table.feat-t .fb i { display: block; height: 100%; background: var(--new); border-radius: 5px; }
+table.feat-t .share { color: var(--muted); text-align: right; }
+table.feat-t th.num { text-align: right; }
+table.feat-t .wk { text-align: center; width: 52px; font-variant-numeric: tabular-nums; }
+table.feat-t td.heat { background: color-mix(in srgb, var(--new) calc(var(--a) * 100%), transparent); background-clip: padding-box; border-left: 2px solid var(--panel); border-right: 2px solid var(--panel); font-weight: 700; font-size: 13px; }
+table.feat-t td.heat.dark { color: var(--paper); }
+
 /* Item list controls */
 .controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin: 4px 0 12px; }
 .seg { display: inline-flex; background: var(--paper); border-radius: 10px; padding: 3px; gap: 2px; }
@@ -206,6 +222,12 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
   .kpi-note { font-size: 12px; }
 }
 @media (max-width: 640px) {
+  table.feat-t .age2, table.feat-t .age3, table.feat-t .age4, table.feat-t .age5, table.feat-t .age6, table.feat-t .age7 { display: none; }
+  table.feat-t .fb { display: none; }
+  table.feat-t .fbar { min-width: 0; }
+  table.feat-t .wk { width: 36px; }
+  table.feat-t td, table.feat-t th { padding: 6px 3px; }
+  table.feat-t th { white-space: normal; }
   table.stack thead { display: none; }
   table.stack, table.stack tbody, table.stack tr, table.stack td { display: block; width: 100%; }
   table.stack tr { padding: 10px 0; border-bottom: 1px solid var(--rule); }
@@ -296,6 +318,8 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
         <div class="chart" id="chart-dp" data-height="230" tabindex="0"></div>
         <h3 class="chart-title">Cleared per added, by day</h3>
         <div class="chart" id="chart-dp-ratio" data-height="150" tabindex="0"></div>
+        <h3 class="chart-title">Running totals, added and cleared</h3>
+        <div class="chart" id="chart-dp-flow" data-height="170" tabindex="0"></div>
       </section>
       <section class="panel lane">
         <h2>Workflow lane defects</h2>
@@ -304,9 +328,17 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
         <div class="chart" id="chart-dw" data-height="230" tabindex="0"></div>
         <h3 class="chart-title">Cleared per added, by day</h3>
         <div class="chart" id="chart-dw-ratio" data-height="150" tabindex="0"></div>
+        <h3 class="chart-title">Running totals, added and cleared</h3>
+        <div class="chart" id="chart-dw-flow" data-height="170" tabindex="0"></div>
       </section>
     </div>
     <p class="also num" id="also-d"></p>
+
+    <section class="panel">
+      <h2>Defects by feature</h2>
+      <p class="panel-sub num" id="feat-sub"></p>
+      <div class="table-scroll" id="features"></div>
+    </section>
 
     <section class="panel">
       <div class="panel-head">
@@ -880,6 +912,152 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     host.onblur = hide;
   }
 
+  // Running totals over the range: everything added since its first day and
+  // everything cleared since then, one line each. The slope of the added line
+  // is how fast new items arrive, whatever clearing is doing, and the gap
+  // between the two lines is the range's net change.
+  function drawFlowChart(host, agg, label) {
+    charts.set(host.id, { redraw: () => drawFlowChart(host, agg, label) });
+    const W = Math.max(260, Math.floor(host.clientWidth));
+    const compact = W < 540;
+    const H = compact ? Math.round(Number(host.dataset.height) * 0.82) : Number(host.dataset.height);
+    const m = { l: compact ? 40 : 50, r: compact ? 78 : 90, t: 14, b: 28 };
+    const pw = W - m.l - m.r, ph = H - m.t - m.b, len = agg.len, base = m.t + ph;
+    const A = agg.cumNew, C = agg.cumClr, last = len - 1;
+    const hi = Math.max(1, A[last], C[last]);
+    const step = niceStep(hi, compact ? 3 : 4);
+    const yMax = Math.ceil(hi / step) * step;
+    const x = (i) => m.l + (len === 1 ? pw / 2 : (i * pw) / (len - 1));
+    const y = (v) => base - (v / yMax) * ph;
+
+    let g = '';
+    for (let v = 0; v <= yMax + 1e-9; v += step) {
+      const yy = y(v).toFixed(1);
+      g += `<line class="grid" x1="${m.l}" x2="${m.l + pw}" y1="${yy}" y2="${yy}"/>`;
+      g += `<text class="tick" x="${m.l - 8}" y="${yy}" dy="0.32em" text-anchor="end">${n(v)}</text>`;
+    }
+    for (const i of xTicks(len, pw)) {
+      g += `<text class="tick" x="${x(i).toFixed(1)}" y="${base + 20}" text-anchor="middle">${esc(dayLabel(agg.start + i))}</text>`;
+    }
+    const pts = (arr) => arr.map((v, i) => `${x(i).toFixed(2)},${y(v).toFixed(2)}`);
+    const pa = pts(A), pc = pts(C);
+    const gap = `<polygon class="f-gap" points="${pa.join(' ')} ${pc.slice().reverse().join(' ')}"/>`;
+    const lines = `<polyline class="l-cum-new" points="${pa.join(' ')}"/><polyline class="l-cum-clr" points="${pc.join(' ')}"/>`;
+
+    // Each line is labeled at its right-hand end, nudged apart when the two
+    // totals sit too close to read.
+    let ya = y(A[last]), yc = y(C[last]);
+    const minGap = 15;
+    if (Math.abs(ya - yc) < minGap) {
+      const mid = (ya + yc) / 2, up = A[last] >= C[last];
+      ya = mid + (up ? -minGap / 2 : minGap / 2); yc = mid + (up ? minGap / 2 : -minGap / 2);
+    }
+    const lx = (x(last) + 8).toFixed(1);
+    const ends = `<text class="end-lbl lbl-new" x="${lx}" y="${ya.toFixed(1)}" dy="0.32em">${n(A[last])} added</text>
+      <text class="end-lbl lbl-clr" x="${lx}" y="${yc.toFixed(1)}" dy="0.32em">${n(C[last])} cleared</text>`;
+
+    const hover = `<g class="hover" visibility="hidden">
+        <line class="xhair" y1="${m.t}" y2="${base}"/>
+        <circle class="dot-new ha" r="3.5"/><circle class="dot-clr hc" r="3.5"/>
+      </g>
+      <rect class="hit" x="${m.l - 6}" y="${m.t}" width="${pw + 12}" height="${ph}"/>`;
+
+    const aria = `${label}: running totals from ${dayLabel(agg.start)} to ${dayLabel(agg.start + last)}, ${n(A[last])} added and ${n(C[last])} cleared.`;
+    host.setAttribute('role', 'img');
+    host.setAttribute('aria-label', aria + ' Use the arrow keys to read individual days.');
+    host.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">${g}${gap}${lines}${ends}${hover}</svg><div class="tip" hidden></div>`;
+
+    const svg = host.querySelector('svg'), hv = svg.querySelector('.hover'), tip = host.querySelector('.tip');
+    const xh = hv.querySelector('.xhair'), ha = hv.querySelector('.ha'), hc = hv.querySelector('.hc');
+    let cur = -1;
+    const show = (i) => {
+      cur = Math.max(0, Math.min(last, i));
+      const px = x(cur);
+      xh.setAttribute('x1', px); xh.setAttribute('x2', px);
+      ha.setAttribute('cx', px); ha.setAttribute('cy', y(A[cur]));
+      hc.setAttribute('cx', px); hc.setAttribute('cy', y(C[cur]));
+      hv.setAttribute('visibility', 'visible');
+      const net = A[cur] - C[cur];
+      tip.innerHTML = `<b>${esc(dayLabel(agg.start + cur, { weekday: 'short' }))}</b><table>
+        <tr class="k-head"><td></td><td>that day</td><td>so far</td></tr>
+        <tr class="k-new"><td>Added</td><td>${n(agg.dayNew[cur])}</td><td>${n(A[cur])}</td></tr>
+        <tr class="k-clr"><td>Cleared</td><td>${n(agg.dayClr[cur])}</td><td>${n(C[cur])}</td></tr>
+        <tr class="k-net"><td>Net</td><td class="${trend(agg.dayNew[cur] - agg.dayClr[cur])}">${signed(agg.dayNew[cur] - agg.dayClr[cur])}</td><td class="${trend(net)}">${signed(net)}</td></tr></table>`;
+      tip.hidden = false;
+      const tw = tip.offsetWidth, th = tip.offsetHeight;
+      let left = px + 14;
+      if (left + tw > W) left = px - tw - 14;
+      tip.style.left = Math.max(0, left) + 'px';
+      tip.style.top = Math.max(0, Math.min(H - th, y(A[cur]) - th / 2)) + 'px';
+    };
+    const hide = () => { hv.setAttribute('visibility', 'hidden'); tip.hidden = true; cur = -1; };
+    const fromEvent = (e) => {
+      const r = svg.getBoundingClientRect();
+      const px = ((e.clientX - r.left) * W) / r.width;
+      return len === 1 ? 0 : Math.round(((px - m.l) / pw) * (len - 1));
+    };
+    const hit = svg.querySelector('.hit');
+    hit.addEventListener('pointermove', (e) => show(fromEvent(e)));
+    hit.addEventListener('pointerdown', (e) => show(fromEvent(e)));
+    hit.addEventListener('pointerleave', hide);
+    host.onkeydown = (e) => {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        show((cur < 0 ? last : cur) + (e.key === 'ArrowLeft' ? -1 : 1));
+      } else if (e.key === 'Escape') hide();
+    };
+    host.onfocus = () => show(last);
+    host.onblur = hide;
+  }
+
+  // Defects added in the range, by their `feature:`, most first: a Pareto
+  // list with each feature's running share of the range's defects, then the
+  // same counts split into 7-day columns ending on the range's last day, so a
+  // feature that keeps producing defects shows as a row that stays dark.
+  const FEATURE_ROWS = 10;
+  function renderFeatures(defects, b) {
+    const inRange = defects.filter((it) => it.added != null && it.added >= b.start && it.added <= b.end);
+    const total = inRange.length;
+    // Whole weeks only, so every column is seven days; a range's leading odd
+    // days count in the totals but in no column.
+    const weeks = Math.max(1, Math.min(8, Math.floor((b.end - b.start + 1) / 7)));
+    const byFeature = new Map();
+    for (const it of inRange) {
+      const key = it.feature || '';
+      let row = byFeature.get(key);
+      if (!row) byFeature.set(key, (row = { key, count: 0, week: new Array(weeks).fill(0) }));
+      row.count++;
+      const w = Math.floor((b.end - it.added) / 7); // 0 is the latest 7 days
+      if (w < weeks) row.week[weeks - 1 - w]++;
+    }
+    const rows = [...byFeature.values()].sort((a, c) => c.count - a.count || a.key.localeCompare(c.key)).slice(0, FEATURE_ROWS);
+    const shown = rows.reduce((s, r) => s + r.count, 0);
+    $('feat-sub').textContent = total
+      ? `${n(total)} defects added in the range across ${n(byFeature.size)} features; the top ${n(rows.length)} carry ${Math.round((100 * shown) / total)}%.`
+      : 'No defects added in the range.';
+    const host = $('features');
+    if (!total) { host.innerHTML = ''; return; }
+    const maxCount = rows[0].count;
+    const maxCell = Math.max(1, ...rows.flatMap((r) => r.week));
+    const weekStart = (k) => Math.max(b.start, b.end - 7 * (weeks - k) + 1);
+    const age = (k) => ` age${weeks - 1 - k}`; // 0 is the latest week
+    let acc = 0;
+    const head = `<tr><th>Feature</th><th>Defects</th><th class="num">Running %</th>${[...Array(weeks).keys()]
+      .map((k) => `<th class="wk${age(k)}">${esc(dayLabel(weekStart(k)))}</th>`).join('')}</tr>`;
+    const body = rows.map((r) => {
+      acc += r.count;
+      const cells = r.week.map((v, k) => {
+        const a = v ? 0.12 + 0.88 * Math.pow(v / maxCell, 0.6) : 0;
+        return `<td class="wk heat${age(k)}${a > 0.55 ? ' dark' : ''}" style="--a:${a.toFixed(2)}">${v ? n(v) : ''}</td>`;
+      }).join('');
+      const name = r.key ? esc(r.key) : '<span class="tag">no feature set</span>';
+      return `<tr><td class="feat">${name}</td>
+        <td class="fbar"><span class="fb"><i style="width:${((100 * r.count) / maxCount).toFixed(1)}%"></i></span><b class="num">${n(r.count)}</b></td>
+        <td class="num share">${Math.round((100 * acc) / total)}%</td>${cells}</tr>`;
+    }).join('');
+    host.innerHTML = `<table class="t feat-t"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  }
+
   const ro = new ResizeObserver((entries) => {
     for (const e of entries) {
       const c = charts.get(e.target.id);
@@ -954,6 +1132,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
         $('ratio-' + key).innerHTML = ratioText(lastN(sub, b.end, window), window);
         drawChart($('chart-' + key), agg, LANE_NAME[code] + what);
         drawRatioChart($('chart-' + key + '-ratio'), dailyRatio(sub, b.start, b.end), LANE_NAME[code] + what);
+        if (pre === 'd') drawFlowChart($('chart-' + key + '-flow'), agg, LANE_NAME[code] + what);
       }
     }
     const also = (pool) => ['c', 'u'].map((code) => {
@@ -962,7 +1141,8 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     }).join('; ');
     $('also').textContent = `Also in the total: ${also(items)}. Crossing items touch both halves; unplaced items declare no touches.`;
     $('also-d').textContent = `Also classed defect, in neither lane: ${also(defects)}. An item counts as a defect when its classes include defect, whatever else they carry; safety or science alone does not.`;
-    ['chart-all', 'chart-p', 'chart-w', 'chart-dp', 'chart-dw', 'chart-all-ratio', 'chart-p-ratio', 'chart-w-ratio', 'chart-dp-ratio', 'chart-dw-ratio']
+    renderFeatures(defects, b);
+    ['chart-all', 'chart-p', 'chart-w', 'chart-dp', 'chart-dw', 'chart-all-ratio', 'chart-p-ratio', 'chart-w-ratio', 'chart-dp-ratio', 'chart-dw-ratio', 'chart-dp-flow', 'chart-dw-flow']
       .forEach((id) => { const el = $(id); el._w = el.clientWidth; ro.observe(el); });
   }
 
