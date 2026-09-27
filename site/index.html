@@ -392,8 +392,12 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
           <option value="c">Crossing</option>
           <option value="u">Unplaced</option>
         </select>
-        <label class="vh" for="q">Filter by id, title or feature</label>
-        <input type="search" id="q" placeholder="Filter by id, title or feature" autocomplete="off">
+        <label class="vh" for="tag-filter">Tag</label>
+        <select id="tag-filter">
+          <option value="all">All tags</option>
+        </select>
+        <label class="vh" for="q">Filter by id, title, feature or tag</label>
+        <input type="search" id="q" placeholder="Filter by id, title, feature or tag" autocomplete="off">
       </div>
       <div class="table-scroll">
         <table class="t stack" id="items">
@@ -482,7 +486,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
 
   const state = {
     meta: null, items: [], byId: new Map(),
-    range: pref.get('range', 'all'), list: 'open', lane: 'all', query: '', showAll: false,
+    range: pref.get('range', 'all'), list: 'open', lane: 'all', tag: 'all', query: '', showAll: false,
     sortKey: null, sortDir: null,
   };
   // Which direction a column starts in on its first click: newest-first for
@@ -497,7 +501,9 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
   // The Tags column shows an item's classes with `defect` first and the rest
   // A-Z, and sorts on that same list with defects ahead of everything else,
   // so one click gathers every defect at the top whatever else it carries.
-  const tagList = (it) => [...it.classes].sort((a, z) => (z === 'defect') - (a === 'defect') || a.localeCompare(z));
+  const tagOrder = (a, z) => (z === 'defect') - (a === 'defect') || a.localeCompare(z);
+  const tagList = (it) => [...it.classes].sort(tagOrder);
+  const NO_TAGS = '(none)';
 
   /* ---------- data ---------- */
   function assemble(snap) {
@@ -1288,10 +1294,13 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     else if (state.list === 'cleared') rows = state.items.filter((it) => CLOSED.includes(it.status) && it.closed != null && it.closed >= b.start && it.closed <= b.end).sort(sortFn);
     else rows = state.items.filter((it) => OPEN.includes(it.status)).sort(sortFn);
     if (state.lane !== 'all') rows = rows.filter((it) => it.lane === state.lane);
+    if (state.tag === NO_TAGS) rows = rows.filter((it) => !it.classes.length);
+    else if (state.tag !== 'all') rows = rows.filter((it) => it.classes.includes(state.tag));
     const q = state.query.trim().toLowerCase();
-    if (q) rows = rows.filter((it) => (it.id + ' ' + it.title + ' ' + (it.feature || '')).toLowerCase().includes(q));
+    if (q) rows = rows.filter((it) => (it.id + ' ' + it.title + ' ' + (it.feature || '') + ' ' + it.classes.join(' ')).toLowerCase().includes(q));
+    const tagged = state.tag === 'all' ? '' : state.tag === NO_TAGS ? ' with no tags' : ' tagged ' + state.tag;
     const what = { added: 'Added in the range', cleared: 'Cleared in the range', open: 'Open now, highest priority first' }[state.list];
-    $('list-sub').textContent = `${what}: ${n(rows.length)} item${rows.length === 1 ? '' : 's'}${state.lane !== 'all' ? ' in the ' + LANE_NAME[state.lane].toLowerCase() + ' lane' : ''}${q ? ' matching the filter' : ''}.`;
+    $('list-sub').textContent = `${what}: ${n(rows.length)} item${rows.length === 1 ? '' : 's'}${state.lane !== 'all' ? ' in the ' + LANE_NAME[state.lane].toLowerCase() + ' lane' : ''}${tagged}${q ? ' matching the filter' : ''}.`;
     $('date-col').querySelector('.label').textContent = state.list === 'cleared' ? 'Closed' : 'Added';
     $('items').querySelectorAll('thead th[data-sort]').forEach((th) => {
       th.setAttribute('aria-sort', state.sortKey === th.dataset.sort ? (state.sortDir === 'desc' ? 'descending' : 'ascending') : 'none');
@@ -1327,7 +1336,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
           ? `<span class="chip dup" title="${esc('Filed ' + filed + ' times. Later captures: ' + recurrenceNote(it.recurrences))}">${n(filed)}\u00d7</span>`
           : '<span class="tag">1\u00d7</span>'}</td>
       </tr>`;
-    }).join('') || '<tr class="empty-row"><td colspan="7">Nothing matches. Widen the range, switch lanes or clear the filter.</td></tr>';
+    }).join('') || '<tr class="empty-row"><td colspan="7">Nothing matches. Widen the range, switch lanes or tags, or clear the filter.</td></tr>';
     const more = $('more');
     more.hidden = rows.length <= 40;
     more.textContent = state.showAll ? 'Show the first 40' : `Show all ${n(rows.length)}`;
@@ -1350,8 +1359,21 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     if (wf) { btn.href = wf; btn.hidden = false; }
   }
 
+  // The tag menu lists every class any item carries, defect first and the
+  // rest A-Z, then items with none. A picked tag that has since left the data
+  // stays listed so the choice is not silently dropped on a refresh.
+  function fillTagFilter() {
+    const tags = new Set(state.items.flatMap((it) => it.classes));
+    if (state.tag !== 'all' && state.tag !== NO_TAGS) tags.add(state.tag);
+    $('tag-filter').innerHTML = '<option value="all">All tags</option>'
+      + [...tags].sort(tagOrder).map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('')
+      + `<option value="${NO_TAGS}">No tags</option>`;
+    $('tag-filter').value = state.tag;
+  }
+
   function renderAll() {
     const b = bounds();
+    fillTagFilter();
     renderHeader(b);
     renderCharts(b);
     renderBranches();
@@ -1434,6 +1456,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('#items thead th[data-sort]')) { e.preventDefault(); e.target.click(); }
   });
   $('lane-filter').addEventListener('change', (e) => { state.lane = e.target.value; state.showAll = false; if (state.meta) renderList(bounds()); });
+  $('tag-filter').addEventListener('change', (e) => { state.tag = e.target.value; state.showAll = false; if (state.meta) renderList(bounds()); });
   let qTimer;
   $('q').addEventListener('input', (e) => {
     clearTimeout(qTimer);
