@@ -265,7 +265,6 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       <div class="chart" id="chart-all" data-height="330" tabindex="0"></div>
       <div class="legend" id="legend-all"></div>
       <h3 class="chart-title">Cleared per added, by day</h3>
-      <p class="panel-sub">For each day, items cleared divided by items added, on a scale centered on 1 (the dashed line), where each gridline doubles or halves. Above it and green, more was cleared than added that day; below it and orange, more was added than cleared. A day that added nothing but cleared something runs to the top, and a day with neither has no bar.</p>
       <div class="chart" id="chart-all-ratio" data-height="180" tabindex="0"></div>
     </section>
 
@@ -538,16 +537,16 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       if (it.added != null && it.added >= s && it.added <= end) f++;
       if (CLOSED.includes(it.status) && it.closed != null && it.closed >= s && it.closed <= end) c++;
     }
-    return { f, c, ratio: c ? f / c : null };
+    return { f, c, ratio: f ? c / f : null };
   }
 
   // The rolling window tracks the selected quick-range button (7/14/30), and
   // falls back to 30 for "All" since a rolling window needs a finite size.
   const ratioWindow = () => (state.range === 'all' ? 30 : Number(state.range));
 
-  const ratioText = (w, window) => w.c
-    ? `Last ${window} days: <b class="num">${n(w.f)}</b> filed, <b class="num">${n(w.c)}</b> cleared, <b class="num">${(w.ratio).toFixed(2)}</b> filed per cleared`
-    : `Last ${window} days: <b class="num">${n(w.f)}</b> filed, none cleared`;
+  const ratioText = (w, window) => w.f
+    ? `Last ${window} days: <b class="num">${n(w.f)}</b> added, <b class="num">${n(w.c)}</b> cleared, <b class="num">${(w.ratio).toFixed(2)}</b> cleared per added`
+    : `Last ${window} days: none added, <b class="num">${n(w.c)}</b> cleared`;
 
   // One point per day in [start, end]: that day's own filed and cleared counts,
   // and their ratio, cleared per added (see ratioLabel).
@@ -1160,7 +1159,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     return [
       `Queue snapshot: ${meta.base_ref} at ${meta.sha.slice(0, 7)}, read ${clock(Date.parse(meta.generated_at))}`,
       `Range ${dayLabel(b.start)} to ${dayLabel(b.end)}: ${all.added} new, ${all.cleared} cleared (${all.done} done, ${all.dropped} dropped); ${all.open} open now (${all.carried} carried in, ${all.added - all.cleared >= 0 ? '+' : ''}${all.added - all.cleared} net)`,
-      `Last ${window} days: ${wk.f} filed, ${wk.c} cleared${wk.ratio != null ? ` (${wk.ratio.toFixed(2)} filed per cleared)` : ''}`,
+      `Last ${window} days: ${wk.f} added, ${wk.c} cleared${wk.ratio != null ? ` (${wk.ratio.toFixed(2)} cleared per added)` : ''}`,
       `Open by status: ready ${c((i) => i.status === 'ready')}, needs-decision ${c((i) => i.status === 'needs-decision')}, blocked ${c((i) => i.status === 'blocked')}, untriaged ${c((i) => i.status === 'untriaged')}`,
       `Open by priority: P0 ${c((i) => i.status !== 'untriaged' && i.priority === 'P0')}, P1 ${c((i) => i.status !== 'untriaged' && i.priority === 'P1')}, P2 ${c((i) => i.status !== 'untriaged' && i.priority === 'P2')}, P3 ${c((i) => i.status !== 'untriaged' && i.priority === 'P3')}`,
       `Open items filed more than once: ${repeats.length ? repeats.map((i) => `${i.id} ${timesFiled(i)}x`).join(', ') : 'none'}`,
