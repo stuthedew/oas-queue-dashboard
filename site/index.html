@@ -289,7 +289,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       </div>
       <div class="chart" id="chart-all" data-height="330" tabindex="0"></div>
       <div class="legend" id="legend-all"></div>
-      <h3 class="chart-title">Cleared per added, by day</h3>
+      <h3 class="chart-title">Added per cleared, by day</h3>
       <div class="chart" id="chart-all-ratio" data-height="180" tabindex="0"></div>
     </section>
 
@@ -299,7 +299,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
         <p class="panel-sub num" id="sub-p"></p>
         <p class="ratio" id="ratio-p"></p>
         <div class="chart" id="chart-p" data-height="230" tabindex="0"></div>
-        <h3 class="chart-title">Cleared per added, by day</h3>
+        <h3 class="chart-title">Added per cleared, by day</h3>
         <div class="chart" id="chart-p-ratio" data-height="150" tabindex="0"></div>
       </section>
       <section class="panel lane">
@@ -307,7 +307,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
         <p class="panel-sub num" id="sub-w"></p>
         <p class="ratio" id="ratio-w"></p>
         <div class="chart" id="chart-w" data-height="230" tabindex="0"></div>
-        <h3 class="chart-title">Cleared per added, by day</h3>
+        <h3 class="chart-title">Added per cleared, by day</h3>
         <div class="chart" id="chart-w-ratio" data-height="150" tabindex="0"></div>
       </section>
     </div>
@@ -319,7 +319,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
         <p class="panel-sub num" id="sub-dp"></p>
         <p class="ratio" id="ratio-dp"></p>
         <div class="chart" id="chart-dp" data-height="230" tabindex="0"></div>
-        <h3 class="chart-title">Cleared per added, by day</h3>
+        <h3 class="chart-title">Added per cleared, by day</h3>
         <div class="chart" id="chart-dp-ratio" data-height="150" tabindex="0"></div>
         <h3 class="chart-title">Running totals, added and cleared</h3>
         <div class="chart" id="chart-dp-flow" data-height="170" tabindex="0"></div>
@@ -329,7 +329,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
         <p class="panel-sub num" id="sub-dw"></p>
         <p class="ratio" id="ratio-dw"></p>
         <div class="chart" id="chart-dw" data-height="230" tabindex="0"></div>
-        <h3 class="chart-title">Cleared per added, by day</h3>
+        <h3 class="chart-title">Added per cleared, by day</h3>
         <div class="chart" id="chart-dw-ratio" data-height="150" tabindex="0"></div>
         <h3 class="chart-title">Running totals, added and cleared</h3>
         <div class="chart" id="chart-dw-flow" data-height="170" tabindex="0"></div>
@@ -577,19 +577,19 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       if (it.added != null && it.added >= s && it.added <= end) f++;
       if (CLOSED.includes(it.status) && it.closed != null && it.closed >= s && it.closed <= end) c++;
     }
-    return { f, c, ratio: f ? c / f : null };
+    return { f, c, ratio: c ? f / c : null };
   }
 
   // The rolling window tracks the selected quick-range button (7/14/30), and
   // falls back to 30 for "All" since a rolling window needs a finite size.
   const ratioWindow = () => (state.range === 'all' ? 30 : Number(state.range));
 
-  const ratioText = (w, window) => w.f
-    ? `Last ${window} days: <b class="num">${n(w.f)}</b> added, <b class="num">${n(w.c)}</b> cleared, <b class="num">${(w.ratio).toFixed(2)}</b> cleared per added`
-    : `Last ${window} days: none added, <b class="num">${n(w.c)}</b> cleared`;
+  const ratioText = (w, window) => w.c
+    ? `Last ${window} days: <b class="num">${n(w.f)}</b> added, <b class="num">${n(w.c)}</b> cleared, <b class="num">${(w.ratio).toFixed(2)}</b> added per cleared`
+    : `Last ${window} days: <b class="num">${n(w.f)}</b> added, none cleared`;
 
   // One point per day in [start, end]: that day's own filed and cleared counts,
-  // and their ratio, cleared per added (see ratioLabel).
+  // and their ratio, added per cleared (see ratioLabel).
   function dailyRatio(items, start, end) {
     const len = end - start + 1;
     const filed = new Array(len).fill(0), cleared = new Array(len).fill(0);
@@ -597,7 +597,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       if (it.added != null && it.added >= start && it.added <= end) filed[it.added - start]++;
       if (CLOSED.includes(it.status) && it.closed != null && it.closed >= start && it.closed <= end) cleared[it.closed - start]++;
     }
-    const ratio = filed.map((f, i) => (f ? cleared[i] / f : cleared[i] ? Infinity : null));
+    const ratio = cleared.map((c, i) => (c ? filed[i] / c : filed[i] ? Infinity : null));
     return { start, len, filed, cleared, ratio };
   }
 
@@ -790,10 +790,10 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     host.onblur = hide;
   }
 
-  // Cleared ÷ added for one day: above 1 the queue shrank that day, below 1 it
-  // grew. A day that cleared items but added none has no finite ratio; it is
+  // Added ÷ cleared for one day: above 1 the queue grew that day, below 1 it
+  // shrank. A day that added items but cleared none has no finite ratio; it is
   // Infinity here and pins to the top of the scale. A day with neither is null.
-  const ratioLabel = (v) => (v === Infinity ? '∞' : v.toFixed(2));
+  const ratioLabel = (v) => (v === Infinity ? '∞' : v === 0 ? '0' : v.toFixed(2));
 
   function drawRatioChart(host, data, label) {
     charts.set(host.id, { redraw: () => drawRatioChart(host, data, label) });
@@ -812,8 +812,8 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     const bandPad = labelBars ? 18 : 3;
     const halfBand = ph / 2 - bandPad;
 
-    // Symmetric log2 scale centered on 1 (breakeven), so clearing twice what was
-    // added and adding twice what was cleared sit equally far from the middle.
+    // Symmetric log2 scale centered on 1 (breakeven), so adding twice what was
+    // cleared and clearing twice what was added sit equally far from the middle.
     // Values beyond the chosen level, including 0 and Infinity, are pinned to
     // the bottom/top edge; the tooltip always shows the day's counts.
     const finite = data.ratio.filter((v) => v != null && v > 0 && v !== Infinity);
@@ -837,8 +837,8 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     const ref = `<line class="ref" x1="${m.l}" x2="${m.l + pw}" y1="${refY}" y2="${refY}"/>
       <text class="tick ref-label" x="${(m.l + pw + 6).toFixed(1)}" y="${refY}" dy="0.32em">1</text>`;
 
-    // One bar per day, rising above 1 (more cleared than added) or falling
-    // below it (more added than cleared). Bars are labeled directly when there
+    // One bar per day, rising above 1 (more added than cleared) or falling
+    // below it (more cleared than added). Bars are labeled directly when there
     // is room; once days are packed too tight for that, only the latest value
     // gets a pill.
     const barW = Math.max(2, Math.min(26, spacing * 0.55));
@@ -848,10 +848,10 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       if (v == null) continue;
       const cx = x(i), yv = y(v), up = v >= 1;
       const barTop = Math.min(yv, centerY), h = Math.max(Math.abs(yv - centerY), 1);
-      bars += `<rect class="${up ? 'bar-clr' : 'bar-new'}" data-i="${i}" x="${(cx - barW / 2).toFixed(2)}" y="${barTop.toFixed(2)}" width="${barW.toFixed(2)}" height="${h.toFixed(2)}"/>`;
+      bars += `<rect class="${up ? 'bar-new' : 'bar-clr'}" data-i="${i}" x="${(cx - barW / 2).toFixed(2)}" y="${barTop.toFixed(2)}" width="${barW.toFixed(2)}" height="${h.toFixed(2)}"/>`;
       if (labelBars) {
         const ly = up ? Math.max(topY + 10, barTop - 5) : Math.min(base - 2, barTop + h + 13);
-        bars += `<text class="bar-label ${up ? 'lbl-clr' : 'lbl-new'}" x="${cx.toFixed(2)}" y="${ly.toFixed(2)}" text-anchor="middle">${ratioLabel(v)}</text>`;
+        bars += `<text class="bar-label ${up ? 'lbl-new' : 'lbl-clr'}" x="${cx.toFixed(2)}" y="${ly.toFixed(2)}" text-anchor="middle">${ratioLabel(v)}</text>`;
       }
     }
     const lastIdx = [...Array(len).keys()].reverse().find((i) => data.ratio[i] != null);
@@ -860,14 +860,14 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       const v = data.ratio[lastIdx], cy = y(v), text = ratioLabel(v), up = v >= 1;
       const w = text.length * 7.9 + 14;
       const px = Math.min(W - w - 1, x(lastIdx) + 9);
-      pill = `<g class="pill ${up ? 'pill-clr' : 'pill-new'}"><rect x="${px.toFixed(1)}" y="${(cy - 11).toFixed(1)}" width="${w.toFixed(1)}" height="22" rx="6"/>
+      pill = `<g class="pill ${up ? 'pill-new' : 'pill-clr'}"><rect x="${px.toFixed(1)}" y="${(cy - 11).toFixed(1)}" width="${w.toFixed(1)}" height="22" rx="6"/>
         <text x="${(px + w / 2).toFixed(1)}" y="${cy.toFixed(1)}" dy="0.34em" text-anchor="middle">${esc(text)}</text></g>`;
     }
 
     const hover = `<g class="hover" visibility="hidden"><line class="xhair" y1="${topY}" y2="${base}"/></g>
       <rect class="hit" x="${m.l - 6}" y="${topY}" width="${pw + 12}" height="${ph}"/>`;
 
-    const aria = `${label} cleared per added by day, ${dayLabel(data.start)} to ${dayLabel(data.start + len - 1)}.`;
+    const aria = `${label} added per cleared by day, ${dayLabel(data.start)} to ${dayLabel(data.start + len - 1)}.`;
     host.setAttribute('role', 'img');
     host.setAttribute('aria-label', aria + ' Use the arrow keys to read individual days.');
     host.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">${g}${ref}${bars}${pill}${hover}</svg><div class="tip" hidden></div>`;
@@ -884,11 +884,11 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       if (curBar) curBar.classList.add('hovered');
       hv.setAttribute('visibility', 'visible');
       const f = data.filed[curI], c = data.cleared[curI];
-      const note = v == null ? 'Nothing added or cleared this day.' : v === Infinity ? 'Nothing added this day, so the bar runs to the top.' : '';
+      const note = v == null ? 'Nothing added or cleared this day.' : v === Infinity ? 'Nothing cleared this day, so the bar runs to the top.' : '';
       tip.innerHTML = `<b>${esc(dayLabel(data.start + curI, { weekday: 'short' }))}</b><table>
         <tr class="k-new"><td>Added</td><td>${n(f)}</td></tr>
         <tr class="k-clr"><td>Cleared</td><td>${n(c)}</td></tr>
-        <tr class="k-net"><td>Cleared per added</td><td class="${v == null ? '' : v >= 1 ? 'down' : 'up'}">${v != null ? ratioLabel(v) : '—'}</td></tr></table>
+        <tr class="k-net"><td>Added per cleared</td><td class="${v == null ? '' : v >= 1 ? 'up' : 'down'}">${v != null ? ratioLabel(v) : '—'}</td></tr></table>
         ${note ? `<p style="margin:4px 0 0;color:var(--muted);font-size:12px">${note}</p>` : ''}`;
       tip.hidden = false;
       const tw = tip.offsetWidth, th = tip.offsetHeight;
@@ -1354,7 +1354,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     return [
       `Queue snapshot: ${meta.base_ref} at ${meta.sha.slice(0, 7)}, read ${clock(Date.parse(meta.generated_at))}`,
       `Range ${dayLabel(b.start)} to ${dayLabel(b.end)}: ${all.added} new, ${all.cleared} cleared (${all.done} done, ${all.dropped} dropped); ${all.open} open now (${all.carried} carried in, ${all.added - all.cleared >= 0 ? '+' : ''}${all.added - all.cleared} net)`,
-      `Last ${window} days: ${wk.f} added, ${wk.c} cleared${wk.ratio != null ? ` (${wk.ratio.toFixed(2)} cleared per added)` : ''}`,
+      `Last ${window} days: ${wk.f} added, ${wk.c} cleared${wk.ratio != null ? ` (${wk.ratio.toFixed(2)} added per cleared)` : ''}`,
       `Open by status: ready ${c((i) => i.status === 'ready')}, needs-decision ${c((i) => i.status === 'needs-decision')}, blocked ${c((i) => i.status === 'blocked')}, untriaged ${c((i) => i.status === 'untriaged')}`,
       `Open by priority: P0 ${c((i) => i.status !== 'untriaged' && i.priority === 'P0')}, P1 ${c((i) => i.status !== 'untriaged' && i.priority === 'P1')}, P2 ${c((i) => i.status !== 'untriaged' && i.priority === 'P2')}, P3 ${c((i) => i.status !== 'untriaged' && i.priority === 'P3')}`,
       `Open items filed more than once: ${repeats.length ? repeats.map((i) => `${i.id} ${timesFiled(i)}x`).join(', ') : 'none'}`,
