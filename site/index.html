@@ -117,7 +117,8 @@ button { font: inherit; color: inherit; }
 .chart .ref { stroke: var(--ink-2); stroke-width: 1.25; stroke-dasharray: 4 4; }
 .chart .l-cum-new { fill: none; stroke: var(--new); stroke-width: 2.5; stroke-linejoin: round; }
 .chart .l-cum-clr { fill: none; stroke: var(--cleared); stroke-width: 2.5; stroke-linejoin: round; }
-.chart .f-gap { fill: var(--open); opacity: 0.12; }
+.chart .f-gap { fill: var(--open); opacity: 0.2; }
+.chart .lbl-open { fill: var(--open-ink); }
 .chart .end-lbl { font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .chart .ref-label { fill: var(--ink-2); text-anchor: start; font-weight: 700; }
 .chart-title { font-size: 16px; font-weight: 700; margin: 18px 0 4px; }
@@ -321,7 +322,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
         <div class="chart" id="chart-dp" data-height="230" tabindex="0"></div>
         <h3 class="chart-title">Added per cleared, by day</h3>
         <div class="chart" id="chart-dp-ratio" data-height="150" tabindex="0"></div>
-        <h3 class="chart-title">Running totals, added and cleared</h3>
+        <h3 class="chart-title">Running totals, added and cleared; the gap is open</h3>
         <div class="chart" id="chart-dp-flow" data-height="170" tabindex="0"></div>
       </section>
       <section class="panel lane">
@@ -331,7 +332,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
         <div class="chart" id="chart-dw" data-height="230" tabindex="0"></div>
         <h3 class="chart-title">Added per cleared, by day</h3>
         <div class="chart" id="chart-dw-ratio" data-height="150" tabindex="0"></div>
-        <h3 class="chart-title">Running totals, added and cleared</h3>
+        <h3 class="chart-title">Running totals, added and cleared; the gap is open</h3>
         <div class="chart" id="chart-dw-flow" data-height="170" tabindex="0"></div>
       </section>
     </div>
@@ -920,48 +921,75 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     host.onblur = hide;
   }
 
-  // Running totals over the range: everything added since its first day and
-  // everything cleared since then, one line each. The slope of the added line
-  // is how fast new items arrive, whatever clearing is doing, and the gap
-  // between the two lines is the range's net change.
-  function drawFlowChart(host, agg, label) {
-    charts.set(host.id, { redraw: () => drawFlowChart(host, agg, label) });
+  // Running totals since the store began: every item added up to each day and
+  // every item cleared up to it, one line each, so the gap between them is the
+  // number open at the end of that day -- the same population and the same
+  // count as the open line on the charts above. An item with no `added:` date
+  // counts as added before any range; one cleared without a `closed:` date, or
+  // with a status this page does not know, is left out of both lines, as it is
+  // left out of the open line. The slope of the added line is how fast new
+  // items arrive, whatever clearing is doing.
+  function flowTotals(items, agg) {
+    const { start, len } = agg;
+    const addAt = new Array(len + 1).fill(0), clrAt = new Array(len + 1).fill(0);
+    let addBefore = 0, clrBefore = 0;
+    for (const it of items) {
+      const isOpen = OPEN.includes(it.status), isClosed = CLOSED.includes(it.status);
+      if (!(isOpen || (isClosed && it.closed != null))) continue;
+      if (it.added == null || it.added < start) addBefore++;
+      else if (it.added - start < len) addAt[it.added - start]++;
+      if (isClosed) {
+        if (it.closed < start) clrBefore++;
+        else if (it.closed - start < len) clrAt[it.closed - start]++;
+      }
+    }
+    const A = [], C = [];
+    let a = addBefore, c = clrBefore;
+    for (let i = 0; i < len; i++) { a += addAt[i]; c += clrAt[i]; A.push(a); C.push(c); }
+    return { start, len, A, C, dayNew: agg.dayNew, dayClr: agg.dayClr };
+  }
+
+  function drawFlowChart(host, flow, label) {
+    charts.set(host.id, { redraw: () => drawFlowChart(host, flow, label) });
     const W = Math.max(260, Math.floor(host.clientWidth));
     const compact = W < 540;
     const H = compact ? Math.round(Number(host.dataset.height) * 0.82) : Number(host.dataset.height);
     const m = { l: compact ? 40 : 50, r: compact ? 78 : 90, t: 14, b: 28 };
-    const pw = W - m.l - m.r, ph = H - m.t - m.b, len = agg.len, base = m.t + ph;
-    const A = agg.cumNew, C = agg.cumClr, last = len - 1;
-    const hi = Math.max(1, A[last], C[last]);
-    const step = niceStep(hi, compact ? 3 : 4);
-    const yMax = Math.ceil(hi / step) * step;
+    const pw = W - m.l - m.r, ph = H - m.t - m.b, len = flow.len, base = m.t + ph;
+    const { A, C } = flow, last = len - 1;
+    // As on the charts above, the scale sits on zero unless anchoring there
+    // would squeeze a short range's lines into a sliver at the top.
+    const hi = Math.max(1, A[last]), low = C[0];
+    const step = niceStep(Math.max(1, low > 0.4 * hi ? hi - low : hi), compact ? 3 : 4);
+    const yMin = low > 0.4 * hi ? Math.floor(low / step) * step : 0;
+    const yMax = Math.max(yMin + step, Math.ceil(hi / step) * step);
     const x = (i) => m.l + (len === 1 ? pw / 2 : (i * pw) / (len - 1));
-    const y = (v) => base - (v / yMax) * ph;
+    const y = (v) => base - ((v - yMin) / (yMax - yMin)) * ph;
 
     let g = '';
-    for (let v = 0; v <= yMax + 1e-9; v += step) {
+    for (let v = yMin; v <= yMax + 1e-9; v += step) {
       const yy = y(v).toFixed(1);
       g += `<line class="grid" x1="${m.l}" x2="${m.l + pw}" y1="${yy}" y2="${yy}"/>`;
       g += `<text class="tick" x="${m.l - 8}" y="${yy}" dy="0.32em" text-anchor="end">${n(v)}</text>`;
     }
     for (const i of xTicks(len, pw)) {
-      g += `<text class="tick" x="${x(i).toFixed(1)}" y="${base + 20}" text-anchor="middle">${esc(dayLabel(agg.start + i))}</text>`;
+      g += `<text class="tick" x="${x(i).toFixed(1)}" y="${base + 20}" text-anchor="middle">${esc(dayLabel(flow.start + i))}</text>`;
     }
     const pts = (arr) => arr.map((v, i) => `${x(i).toFixed(2)},${y(v).toFixed(2)}`);
     const pa = pts(A), pc = pts(C);
     const gap = `<polygon class="f-gap" points="${pa.join(' ')} ${pc.slice().reverse().join(' ')}"/>`;
     const lines = `<polyline class="l-cum-new" points="${pa.join(' ')}"/><polyline class="l-cum-clr" points="${pc.join(' ')}"/>`;
 
-    // Each line is labeled at its right-hand end, nudged apart when the two
-    // totals sit too close to read.
-    let ya = y(A[last]), yc = y(C[last]);
+    // The right-hand end carries three labels: the added total by its line, the
+    // cleared total by its line, and the open count in the gap between them,
+    // spread apart when the gap is too narrow to read them where they fall.
+    const open = A[last] - C[last];
+    let ya = y(A[last]), yc = y(C[last]), yo = (ya + yc) / 2;
     const minGap = 15;
-    if (Math.abs(ya - yc) < minGap) {
-      const mid = (ya + yc) / 2, up = A[last] >= C[last];
-      ya = mid + (up ? -minGap / 2 : minGap / 2); yc = mid + (up ? minGap / 2 : -minGap / 2);
-    }
+    if (yc - ya < 2 * minGap) { ya = yo - minGap; yc = yo + minGap; }
     const lx = (x(last) + 8).toFixed(1);
     const ends = `<text class="end-lbl lbl-new" x="${lx}" y="${ya.toFixed(1)}" dy="0.32em">${n(A[last])} added</text>
+      <text class="end-lbl lbl-open" x="${lx}" y="${yo.toFixed(1)}" dy="0.32em">${n(open)} open</text>
       <text class="end-lbl lbl-clr" x="${lx}" y="${yc.toFixed(1)}" dy="0.32em">${n(C[last])} cleared</text>`;
 
     const hover = `<g class="hover" visibility="hidden">
@@ -970,7 +998,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       </g>
       <rect class="hit" x="${m.l - 6}" y="${m.t}" width="${pw + 12}" height="${ph}"/>`;
 
-    const aria = `${label}: running totals from ${dayLabel(agg.start)} to ${dayLabel(agg.start + last)}, ${n(A[last])} added and ${n(C[last])} cleared.`;
+    const aria = `${label}: running totals to ${dayLabel(flow.start + last)}, ${n(A[last])} added and ${n(C[last])} cleared, ${n(open)} open.`;
     host.setAttribute('role', 'img');
     host.setAttribute('aria-label', aria + ' Use the arrow keys to read individual days.');
     host.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">${g}${gap}${lines}${ends}${hover}</svg><div class="tip" hidden></div>`;
@@ -985,12 +1013,11 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       ha.setAttribute('cx', px); ha.setAttribute('cy', y(A[cur]));
       hc.setAttribute('cx', px); hc.setAttribute('cy', y(C[cur]));
       hv.setAttribute('visibility', 'visible');
-      const net = A[cur] - C[cur];
-      tip.innerHTML = `<b>${esc(dayLabel(agg.start + cur, { weekday: 'short' }))}</b><table>
-        <tr class="k-head"><td></td><td>that day</td><td>so far</td></tr>
-        <tr class="k-new"><td>Added</td><td>${n(agg.dayNew[cur])}</td><td>${n(A[cur])}</td></tr>
-        <tr class="k-clr"><td>Cleared</td><td>${n(agg.dayClr[cur])}</td><td>${n(C[cur])}</td></tr>
-        <tr class="k-net"><td>Net</td><td class="${trend(agg.dayNew[cur] - agg.dayClr[cur])}">${signed(agg.dayNew[cur] - agg.dayClr[cur])}</td><td class="${trend(net)}">${signed(net)}</td></tr></table>`;
+      tip.innerHTML = `<b>${esc(dayLabel(flow.start + cur, { weekday: 'short' }))}</b><table>
+        <tr class="k-open"><td>Open</td><td colspan="2">${n(A[cur] - C[cur])}</td></tr>
+        <tr class="k-head"><td></td><td>that day</td><td>total</td></tr>
+        <tr class="k-new"><td>Added</td><td>${n(flow.dayNew[cur])}</td><td>${n(A[cur])}</td></tr>
+        <tr class="k-clr"><td>Cleared</td><td>${n(flow.dayClr[cur])}</td><td>${n(C[cur])}</td></tr></table>`;
       tip.hidden = false;
       const tw = tip.offsetWidth, th = tip.offsetHeight;
       let left = px + 14;
@@ -1140,7 +1167,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
         $('ratio-' + key).innerHTML = ratioText(lastN(sub, b.end, window), window);
         drawChart($('chart-' + key), agg, LANE_NAME[code] + what);
         drawRatioChart($('chart-' + key + '-ratio'), dailyRatio(sub, b.start, b.end), LANE_NAME[code] + what);
-        if (pre === 'd') drawFlowChart($('chart-' + key + '-flow'), agg, LANE_NAME[code] + what);
+        if (pre === 'd') drawFlowChart($('chart-' + key + '-flow'), flowTotals(sub, agg), LANE_NAME[code] + what);
       }
     }
     const also = (pool) => ['c', 'u'].map((code) => {
