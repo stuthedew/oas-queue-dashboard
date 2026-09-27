@@ -156,6 +156,9 @@ table.t th[aria-sort="descending"] .arrow::after { content: '\25BC'; }
 .chip.flight { background: var(--open-tint); color: var(--open-ink); }
 .chip.dup { background: var(--new-tint); color: var(--new-ink); }
 .chip.stranded { background: var(--warn-tint); color: var(--warn); }
+.tags { display: inline-flex; flex-wrap: wrap; gap: 3px; vertical-align: top; }
+.tags .chip { font-weight: 500; padding: 0 7px; }
+.tags .chip.defect { background: var(--warn-tint); color: var(--warn); font-weight: 700; }
 .tag { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
 .idlink { font-family: var(--mono); font-size: 12.5px; text-decoration: none; background: var(--chip); padding: 1px 6px; border-radius: 5px; white-space: nowrap; }
 .idlink:hover { text-decoration: underline; }
@@ -397,6 +400,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
             <th id="date-col" data-sort="date" tabindex="0"><span class="label">Added</span><span class="arrow" aria-hidden="true"></span></th>
             <th data-sort="item" tabindex="0"><span class="label">Item</span><span class="arrow" aria-hidden="true"></span></th>
             <th data-sort="lane" tabindex="0"><span class="label">Lane</span><span class="arrow" aria-hidden="true"></span></th>
+            <th data-sort="tags" tabindex="0" title="The item's classes: field"><span class="label">Tags</span><span class="arrow" aria-hidden="true"></span></th>
             <th data-sort="state" tabindex="0"><span class="label">State</span><span class="arrow" aria-hidden="true"></span></th>
             <th data-sort="priority" tabindex="0"><span class="label">Priority</span><span class="arrow" aria-hidden="true"></span></th>
             <th data-sort="filed" tabindex="0"><span class="label">Filed</span><span class="arrow" aria-hidden="true"></span></th>
@@ -482,13 +486,17 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
   };
   // Which direction a column starts in on its first click: newest-first for
   // dates, highest-priority-first for priority, A-Z for the text columns.
-  const SORT_DEFAULT_DIR = { date: 'desc', item: 'asc', lane: 'asc', state: 'asc', priority: 'asc', filed: 'desc' };
+  const SORT_DEFAULT_DIR = { date: 'desc', item: 'asc', lane: 'asc', tags: 'asc', state: 'asc', priority: 'asc', filed: 'desc' };
   const timesFiled = (it) => it.recurrences.length + 1;
   // docket's label for a bug is the class `defect`, and it alone decides: an
   // item carrying it counts whatever else it carries (`defect, safety` does),
   // and `safety` or `science` without it does not, any more than housekeeping
   // or feature work. A plain membership test, as docket reads classes.
   const isDefect = (it) => it.classes.includes('defect');
+  // The Tags column shows an item's classes with `defect` first and the rest
+  // A-Z, and sorts on that same list with defects ahead of everything else,
+  // so one click gathers every defect at the top whatever else it carries.
+  const tagList = (it) => [...it.classes].sort((a, z) => (z === 'defect') - (a === 'defect') || a.localeCompare(z));
 
   /* ---------- data ---------- */
   function assemble(snap) {
@@ -1229,7 +1237,8 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       return prioRank(a) - prioRank(z) || (z.added ?? 0) - (a.added ?? 0);
     };
     // A user-picked column always wins ties by id, so the order stays stable
-    // (and matches) when two rows tie on the chosen column.
+    // (and matches) when two rows tie on the chosen column. Tags tie in large
+    // groups, so within one set of tags the tab's own order comes first.
     const columnSort = (a, z) => {
       const mul = state.sortDir === 'desc' ? -1 : 1;
       let cmp = 0;
@@ -1238,10 +1247,13 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
         cmp = da == null && dz == null ? 0 : da == null ? 1 : dz == null ? -1 : (da - dz) * mul;
       } else if (state.sortKey === 'item') cmp = a.id.localeCompare(z.id) * mul;
       else if (state.sortKey === 'lane') cmp = (LANE_NAME[a.lane] || a.lane).localeCompare(LANE_NAME[z.lane] || z.lane) * mul;
-      else if (state.sortKey === 'state') cmp = a.status.localeCompare(z.status) * mul;
+      else if (state.sortKey === 'tags') {
+        const ta = tagList(a).join(', '), tz = tagList(z).join(', ');
+        cmp = !ta && !tz ? 0 : !ta ? 1 : !tz ? -1 : ((isDefect(z) - isDefect(a)) || ta.localeCompare(tz)) * mul;
+      } else if (state.sortKey === 'state') cmp = a.status.localeCompare(z.status) * mul;
       else if (state.sortKey === 'priority') cmp = (prioRank(a) - prioRank(z)) * mul;
       else if (state.sortKey === 'filed') cmp = (timesFiled(a) - timesFiled(z)) * mul;
-      return cmp || z.id.localeCompare(a.id);
+      return cmp || (state.sortKey === 'tags' && defaultSort(a, z)) || z.id.localeCompare(a.id);
     };
     const sortFn = state.sortKey ? columnSort : defaultSort;
     let rows;
@@ -1279,13 +1291,16 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
         <td class="title-cell"><a class="idlink" href="${esc(repo)}/blob/main/docs/items/${encodeURIComponent(it.file)}" target="_blank" rel="noopener noreferrer">${esc(it.id)}</a>
           <span class="t" title="${esc(it.title)}">${esc(it.title)}</span></td>
         <td data-label="Lane" style="white-space:nowrap">${esc(LANE_NAME[it.lane] || it.lane)}</td>
+        <td data-label="Tags" class="${it.classes.length ? '' : 'quiet'}">${it.classes.length
+          ? `<span class="tags">${tagList(it).map((c) => `<span class="chip${c === 'defect' ? ' defect' : ''}">${esc(c)}</span>`).join('')}</span>`
+          : '<span class="tag">\u2014</span>'}</td>
         <td data-label="State" style="white-space:nowrap">${esc(st)}</td>
         <td data-label="Priority" style="white-space:nowrap">${esc(prio)}</td>
         <td data-label="Filed" class="${filed > 1 ? '' : 'quiet'}" style="white-space:nowrap">${filed > 1
           ? `<span class="chip dup" title="${esc('Filed ' + filed + ' times. Later captures: ' + recurrenceNote(it.recurrences))}">${n(filed)}\u00d7</span>`
           : '<span class="tag">1\u00d7</span>'}</td>
       </tr>`;
-    }).join('') || '<tr class="empty-row"><td colspan="6">Nothing matches. Widen the range, switch lanes or clear the filter.</td></tr>';
+    }).join('') || '<tr class="empty-row"><td colspan="7">Nothing matches. Widen the range, switch lanes or clear the filter.</td></tr>';
     const more = $('more');
     more.hidden = rows.length <= 40;
     more.textContent = state.showAll ? 'Show the first 40' : `Show all ${n(rows.length)}`;
