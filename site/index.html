@@ -487,7 +487,9 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
   const state = {
     meta: null, items: [], byId: new Map(),
     range: pref.get('range', 'all'), list: 'open', lane: 'all', tag: 'all', query: '', showAll: false,
-    sortKey: null, sortDir: null,
+    // The table opens sorted on its date column, newest first: Added on the
+    // Open now and Added tabs, Closed on the Cleared tab.
+    sortKey: 'date', sortDir: 'desc',
   };
   // Which direction a column starts in on its first click: newest-first for
   // dates, highest-priority-first for priority, A-Z for the text columns.
@@ -1263,7 +1265,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
 
   function renderList(b) {
     const prioRank = (it) => (it.status === 'untriaged' ? 9 : ({ P0: 0, P1: 1, P2: 2, P3: 3 }[it.priority] ?? 8));
-    // The default order for each tab, used until the user picks a column.
+    // Each tab's own order, which breaks ties within one set of tags.
     const defaultSort = (a, z) => {
       if (state.list === 'added') return z.added - a.added || z.id.localeCompare(a.id);
       if (state.list === 'cleared') return z.closed - a.closed || z.id.localeCompare(a.id);
@@ -1299,7 +1301,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     const q = state.query.trim().toLowerCase();
     if (q) rows = rows.filter((it) => (it.id + ' ' + it.title + ' ' + (it.feature || '') + ' ' + it.classes.join(' ')).toLowerCase().includes(q));
     const tagged = state.tag === 'all' ? '' : state.tag === NO_TAGS ? ' with no tags' : ' tagged ' + state.tag;
-    const what = { added: 'Added in the range', cleared: 'Cleared in the range', open: 'Open now, highest priority first' }[state.list];
+    const what = { added: 'Added in the range', cleared: 'Cleared in the range', open: 'Open now' }[state.list];
     $('list-sub').textContent = `${what}: ${n(rows.length)} item${rows.length === 1 ? '' : 's'}${state.lane !== 'all' ? ' in the ' + LANE_NAME[state.lane].toLowerCase() + ' lane' : ''}${tagged}${q ? ' matching the filter' : ''}.`;
     $('date-col').querySelector('.label').textContent = state.list === 'cleared' ? 'Closed' : 'Added';
     $('items').querySelectorAll('thead th[data-sort]').forEach((th) => {
