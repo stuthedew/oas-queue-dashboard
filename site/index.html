@@ -120,7 +120,7 @@ button { font: inherit; color: inherit; }
 .chart .f-gap { fill: var(--open); opacity: 0.2; }
 .chart .lbl-open { fill: var(--open-ink); }
 .chart .end-lbl { font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.chart .ref-label { fill: var(--ink-2); text-anchor: start; font-weight: 700; }
+.chart .ref-label { fill: var(--ink-2); font-weight: 700; }
 .chart-title { font-size: 16px; font-weight: 700; margin: 18px 0 4px; }
 .chart .xhair { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 3 3; }
 .chart .hit { fill: transparent; cursor: crosshair; }
@@ -809,17 +809,8 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     const W = Math.max(260, Math.floor(host.clientWidth));
     const compact = W < 540;
     const H = compact ? Math.round(Number(host.dataset.height) * 0.82) : Number(host.dataset.height);
-    const m = { l: compact ? 34 : 42, r: compact ? 40 : 48, t: 14, b: 28 };
-    const pw = W - m.l - m.r, ph = H - m.t - m.b, len = data.len, topY = m.t, base = m.t + ph, centerY = m.t + ph / 2;
-
-    // One bar per day, so figure out early whether there's room to label each
-    // bar directly (see below) — that also decides how much of the plot band's
-    // top/bottom edge to hold back as a gutter, so a bar pinned to the scale's
-    // limit doesn't push its own tip label onto its fill.
-    const spacing = len > 1 ? pw / (len - 1) : pw;
-    const labelBars = spacing >= 30;
-    const bandPad = labelBars ? 18 : 3;
-    const halfBand = ph / 2 - bandPad;
+    const m = { l: 0, r: 14, t: 14, b: 28 };
+    const len = data.len, ph = H - m.t - m.b, topY = m.t, base = m.t + ph, centerY = m.t + ph / 2;
 
     // Symmetric log2 scale centered on 1 (breakeven), so adding twice what was
     // cleared and clearing twice what was added sit equally far from the middle.
@@ -828,7 +819,36 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     const finite = data.ratio.filter((v) => v != null && v > 0 && v !== Infinity);
     const maxAbsLog = finite.length ? Math.max(...finite.map((v) => Math.abs(Math.log2(v)))) : 0;
     const levelLog2 = Math.min(4, Math.max(1, Math.ceil(maxAbsLog)));
-    const x = (i) => m.l + (len === 1 ? pw / 2 : (i * pw) / (len - 1));
+
+    // Label every power of two only when they sit far enough apart to read;
+    // otherwise every other one (always including 1). The left margin fits the
+    // widest label shown, so 0.0625 doesn't run off the panel's edge.
+    const tickStep = (ph / 2 - 18) / levelLog2 >= 14 ? 1 : 2;
+    const tickKs = [];
+    for (let k = -levelLog2; k <= levelLog2; k++) if (k % tickStep === 0) tickKs.push(k);
+    m.l = Math.max(compact ? 34 : 42, Math.max(...tickKs.map((k) => String(Math.pow(2, k)).length)) * 7.6 + 12);
+
+    // One bar per day, so figure out early whether there's room to label each
+    // bar directly (see below) — that also decides how much of the plot band's
+    // top/bottom edge to hold back as a gutter, so a bar pinned to the scale's
+    // limit doesn't push its own tip label onto its fill. When the bars go
+    // unlabeled, the latest value gets a pill instead, and the right margin
+    // widens to hold it so it sits beside the last bar rather than over it.
+    // (Widening only tightens the spacing, so the bars stay unlabeled.)
+    const lastIdx = [...Array(len).keys()].reverse().find((i) => data.ratio[i] != null);
+    const pillText = lastIdx != null ? ratioLabel(data.ratio[lastIdx]) : '';
+    const pillW = pillText.length * 7.9 + 14;
+    const spacingFor = (w) => (len > 1 ? w / (len - 1) : w);
+    const labelBars = spacingFor(W - m.l - m.r) >= 30;
+    if (!labelBars && lastIdx != null) m.r = pillW + 16;
+    const pw = W - m.l - m.r, spacing = spacingFor(pw);
+    // Bars are centered on their day, so hold the first and last half a bar in
+    // from the plot's edges, clear of the tick labels on the left.
+    const barW = Math.max(2, Math.min(26, spacing * 0.55)), inset = barW / 2 + 2;
+    const bandPad = labelBars ? 18 : 3;
+    const halfBand = ph / 2 - bandPad;
+
+    const x = (i) => m.l + (len === 1 ? pw / 2 : inset + (i * (pw - 2 * inset)) / (len - 1));
     const yOfLog = (lg) => centerY - (Math.max(-levelLog2, Math.min(levelLog2, lg)) / levelLog2) * halfBand;
     const y = (v) => (v > 0 ? yOfLog(Math.log2(v)) : yOfLog(-levelLog2));
 
@@ -837,20 +857,19 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       if (k === 0) continue; // the 1 line is drawn separately, as the reference axis
       const yy = yOfLog(k).toFixed(1);
       g += `<line class="grid" x1="${m.l}" x2="${m.l + pw}" y1="${yy}" y2="${yy}"/>`;
-      g += `<text class="tick" x="${m.l - 8}" y="${yy}" dy="0.32em" text-anchor="end">${Math.pow(2, k)}</text>`;
+      if (k % tickStep === 0) g += `<text class="tick" x="${m.l - 8}" y="${yy}" dy="0.32em" text-anchor="end">${Math.pow(2, k)}</text>`;
     }
     for (const i of xTicks(len, pw)) {
       g += `<text class="tick" x="${x(i).toFixed(1)}" y="${base + 20}" text-anchor="middle">${esc(dayLabel(data.start + i))}</text>`;
     }
     const refY = centerY.toFixed(1);
     const ref = `<line class="ref" x1="${m.l}" x2="${m.l + pw}" y1="${refY}" y2="${refY}"/>
-      <text class="tick ref-label" x="${(m.l + pw + 6).toFixed(1)}" y="${refY}" dy="0.32em">1</text>`;
+      <text class="tick ref-label" x="${m.l - 8}" y="${refY}" dy="0.32em" text-anchor="end">1</text>`;
 
     // One bar per day, rising above 1 (more added than cleared) or falling
     // below it (more cleared than added). Bars are labeled directly when there
     // is room; once days are packed too tight for that, only the latest value
     // gets a pill.
-    const barW = Math.max(2, Math.min(26, spacing * 0.55));
     let bars = '';
     for (let i = 0; i < len; i++) {
       const v = data.ratio[i];
@@ -863,14 +882,12 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
         bars += `<text class="bar-label ${up ? 'lbl-new' : 'lbl-clr'}" x="${cx.toFixed(2)}" y="${ly.toFixed(2)}" text-anchor="middle">${ratioLabel(v)}</text>`;
       }
     }
-    const lastIdx = [...Array(len).keys()].reverse().find((i) => data.ratio[i] != null);
     let pill = '';
     if (!labelBars && lastIdx != null) {
-      const v = data.ratio[lastIdx], cy = y(v), text = ratioLabel(v), up = v >= 1;
-      const w = text.length * 7.9 + 14;
-      const px = Math.min(W - w - 1, x(lastIdx) + 9);
-      pill = `<g class="pill ${up ? 'pill-new' : 'pill-clr'}"><rect x="${px.toFixed(1)}" y="${(cy - 11).toFixed(1)}" width="${w.toFixed(1)}" height="22" rx="6"/>
-        <text x="${(px + w / 2).toFixed(1)}" y="${cy.toFixed(1)}" dy="0.34em" text-anchor="middle">${esc(text)}</text></g>`;
+      const v = data.ratio[lastIdx], cy = y(v), up = v >= 1;
+      const px = Math.min(W - pillW - 1, x(lastIdx) + barW / 2 + 6);
+      pill = `<g class="pill ${up ? 'pill-new' : 'pill-clr'}"><rect x="${px.toFixed(1)}" y="${(cy - 11).toFixed(1)}" width="${pillW.toFixed(1)}" height="22" rx="6"/>
+        <text x="${(px + pillW / 2).toFixed(1)}" y="${cy.toFixed(1)}" dy="0.34em" text-anchor="middle">${esc(pillText)}</text></g>`;
     }
 
     const hover = `<g class="hover" visibility="hidden"><line class="xhair" y1="${topY}" y2="${base}"/></g>
