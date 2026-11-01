@@ -210,6 +210,23 @@ table.prog-t .pb i { display: block; height: 100%; min-width: 2px; }
 table.prog-t .pct { display: inline-block; min-width: 2.8em; text-align: right; color: var(--ink-2); font-size: 13px; }
 table.prog-t .left { font-weight: 700; color: var(--open-ink); }
 table.prog-t .quiet-n { color: var(--muted); }
+details.explain { margin-top: 8px; max-width: 70ch; }
+details.explain summary { font-size: 13.5px; }
+.explain-body { color: var(--ink-2); font-size: 13.5px; display: grid; gap: 6px; margin-top: 6px; }
+table.prog-t button.fname { border: 0; background: none; padding: 0; margin: 0; cursor: pointer; text-align: left; color: var(--ink); display: inline-flex; align-items: baseline; gap: 6px; max-width: 100%; }
+table.prog-t button.fname:hover .fn { text-decoration: underline; }
+table.prog-t .fn { overflow-wrap: break-word; min-width: 0; }
+table.prog-t .caret { flex: none; width: 0.8em; color: var(--muted); font-size: 11px; }
+table.prog-t .caret::before { content: '\25B8'; }
+table.prog-t button.fname[aria-expanded="true"] .caret::before { content: '\25BE'; }
+table.prog-t tr.expanded td { border-bottom: 0; }
+table.prog-t tr.fdetail td { padding: 0 4px 14px 22px; vertical-align: top; }
+.fdetail .facts { color: var(--muted); font-size: 13px; margin-bottom: 8px; overflow-wrap: anywhere; }
+.fitems { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.fitems li { display: grid; grid-template-columns: auto 2.4em auto minmax(0, 1fr); gap: 2px 10px; align-items: baseline; font-size: 13.5px; }
+.fitems .fi-prio { color: var(--ink-2); font-weight: 600; }
+.fitems .chip { justify-self: start; }
+.fitems .fi-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 
 /* Item list controls */
 .controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin: 4px 0 12px; }
@@ -250,8 +267,12 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
   table.feat-t td, table.feat-t th { padding: 6px 3px; }
   table.feat-t th { white-space: normal; }
   table.prog-t .drop-col { display: none; }
-  table.prog-t .pcell { min-width: 110px; }
+  table.prog-t .pcell { min-width: 0; }
+  table.prog-t .pb { min-width: 48px; }
   table.prog-t td, table.prog-t th { padding: 6px 3px; }
+  table.prog-t tr.fdetail td { padding: 0 3px 12px 3px; }
+  .fitems li { grid-template-columns: auto auto minmax(0, 1fr); }
+  .fitems .fi-title { grid-column: 1 / -1; }
   table.stack thead { display: none; }
   table.stack, table.stack tbody, table.stack tr, table.stack td { display: block; width: 100%; }
   table.stack tr { padding: 10px 0; border-bottom: 1px solid var(--rule); }
@@ -260,6 +281,11 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
   table.stack td[data-label]::before { content: attr(data-label) " "; color: var(--muted); font-size: 12.5px; margin-right: 4px; }
   table.stack td.quiet { display: none; }
   .table-scroll { margin: 0; }
+}
+@media (max-width: 420px) {
+  /* Done's own "28/41" carries the ratio; the bar takes the room */
+  table.prog-t .pct { display: none; }
+  table.prog-t .pb { width: 100%; margin-right: 0; }
 }
 @media (max-width: 520px) {
   .kpis { grid-template-columns: 1fr; }
@@ -396,17 +422,25 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
         <div>
           <h2>Open features</h2>
           <p class="panel-sub num" id="fprog-sub"></p>
+          <details class="explain">
+            <summary>What is a feature?</summary>
+            <div class="explain-body">
+              <p>A feature is a name the project gives a group of queue items that together deliver one thing, written in each item's <code>feature:</code> field, such as <code>feature: schematic</code>. Docket defines it as "a coherent chunk of functionality, which may span several items", and the project names a group for what completes, so that <code>bin/docket feature &lt;name&gt;</code> can answer "is that dealt with?"</p>
+              <p>The project keeps no description of a feature beyond its name, so its items are its description. Select a feature's name to list the items still open in it, each linked to its file.</p>
+              <p><b>Done</b> is an item closed as done. <b>Open</b> is one not closed yet: untriaged, ready, needs-decision or blocked. <b>Dropped</b> is closed without being done; it counts in the feature's total and in neither of the other two. <b>Progress</b> is done over that total, as <code>bin/docket feature</code> prints it, and a feature is <b>complete</b> once nothing in it is open.</p>
+            </div>
+          </details>
         </div>
       </div>
       <div class="comp" id="fprog-sum"></div>
       <div class="table-scroll" style="margin-top:16px">
         <table class="t prog-t" id="fprog">
           <thead><tr>
-            <th data-sort="name" tabindex="0"><span class="label">Feature</span><span class="arrow" aria-hidden="true"></span></th>
+            <th data-sort="name" tabindex="0" title="Select a feature's name to list the items still open in it"><span class="label">Feature</span><span class="arrow" aria-hidden="true"></span></th>
             <th data-sort="progress" tabindex="0" title="Done over all of the feature's items, dropped included, as bin/docket feature counts"><span class="label">Progress</span><span class="arrow" aria-hidden="true"></span></th>
-            <th class="num" data-sort="done" tabindex="0"><span class="label">Done</span><span class="arrow" aria-hidden="true"></span></th>
-            <th class="num" data-sort="open" tabindex="0"><span class="label">Open</span><span class="arrow" aria-hidden="true"></span></th>
-            <th class="num drop-col" data-sort="dropped" tabindex="0"><span class="label">Dropped</span><span class="arrow" aria-hidden="true"></span></th>
+            <th class="num" data-sort="done" tabindex="0" title="Items closed as done, over all of the feature's items"><span class="label">Done</span><span class="arrow" aria-hidden="true"></span></th>
+            <th class="num" data-sort="open" tabindex="0" title="Items not closed yet: untriaged, ready, needs-decision or blocked"><span class="label">Open</span><span class="arrow" aria-hidden="true"></span></th>
+            <th class="num drop-col" data-sort="dropped" tabindex="0" title="Items closed without being done: in the total, but neither done nor open"><span class="label">Dropped</span><span class="arrow" aria-hidden="true"></span></th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -535,6 +569,9 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     sortKey: 'date', sortDir: 'desc',
     // The Open features table opens with the most work left at the top.
     fSortKey: 'open', fSortDir: 'desc', fShowAll: false,
+    // Features whose open items are listed beneath their row, by name, so a
+    // re-sort or a refresh keeps them open.
+    fExpanded: new Set(),
   };
   const FSORT_DEFAULT_DIR = { name: 'asc', progress: 'desc', done: 'desc', open: 'desc', dropped: 'desc' };
   const FEATURE_PROGRESS_ROWS = 12;
@@ -553,6 +590,8 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
   const tagOrder = (a, z) => (z === 'defect') - (a === 'defect') || a.localeCompare(z);
   const tagList = (it) => [...it.classes].sort(tagOrder);
   const NO_TAGS = '(none)';
+  // P0 first, an untriaged item (which has no priority yet) last.
+  const prioRank = (it) => (it.status === 'untriaged' ? 9 : ({ P0: 0, P1: 1, P2: 2, P3: 3 }[it.priority] ?? 8));
 
   /* ---------- data ---------- */
   function assemble(snap) {
@@ -1339,8 +1378,9 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     for (const it of state.items) {
       if (!it.feature) continue;
       let f = by.get(it.feature);
-      if (!f) by.set(it.feature, (f = { name: it.feature, total: 0, done: 0, dropped: 0, open: 0 }));
+      if (!f) by.set(it.feature, (f = { name: it.feature, total: 0, done: 0, dropped: 0, open: 0, items: [] }));
       f.total++;
+      f.items.push(it);
       if (it.status === 'done') f.done++;
       else if (it.status === 'dropped') f.dropped++;
       else f.open++;
@@ -1352,6 +1392,35 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
   // and every column sort's tie-breaker.
   const featureOrder = (a, z) => z.open - a.open || progressOf(z) - progressOf(a) || a.name.localeCompare(z.name);
   const docketLine = (f) => `${f.name} ${f.done}/${f.total} done (${f.open} left)`;
+
+  // What can be said about one feature beyond its counts: when it started and
+  // with which item, when anything in it last closed, and the items still open
+  // in it, highest priority first and then newest, as the Open now tab orders
+  // them. The store keeps no description of a feature, so its items stand in
+  // for one.
+  const NO_STRANDED = new Map();
+  function featureFacts(f) {
+    const dated = f.items.filter((it) => it.added != null);
+    const first = dated.length ? dated.reduce((a, z) => (z.added < a.added || (z.added === a.added && z.id < a.id) ? z : a)) : null;
+    const closes = f.items.filter((it) => CLOSED.includes(it.status) && it.closed != null).map((it) => it.closed);
+    return { first, lastClosed: closes.length ? Math.max(...closes) : null };
+  }
+  function featureDetail(f) {
+    const { first, lastClosed } = featureFacts(f);
+    const year = { year: 'numeric' };
+    const facts = [
+      first ? `Started ${esc(dayLabel(first.added, year))} with ${idLink(first.id, state.byId, NO_STRANDED, 'main')}` : 'No item in it carries an added date',
+      lastClosed != null ? `last item closed ${esc(dayLabel(lastClosed, year))}` : 'nothing in it closed yet',
+      `${n(f.done)} done, ${n(f.dropped)} dropped, ${n(f.open)} open`,
+    ].join('; ');
+    const open = f.items.filter((it) => !CLOSED.includes(it.status))
+      .sort((a, z) => prioRank(a) - prioRank(z) || (z.added ?? 0) - (a.added ?? 0) || a.id.localeCompare(z.id));
+    const list = open.map((it) => `<li>${idLink(it.id, state.byId, NO_STRANDED, 'main')}
+        <span class="fi-prio">${esc(it.status === 'untriaged' ? '\u2014' : (it.priority || '\u2014'))}</span>
+        <span class="chip">${esc(it.status.replace('-', ' ') || 'no status')}</span>
+        <span class="fi-title" title="${esc(it.title)}">${esc(it.title)}</span></li>`).join('');
+    return `<p class="facts">${facts}.</p><ul class="fitems" aria-label="${esc('Open items in ' + f.name)}">${list}</ul>`;
+  }
 
   function renderFeatureProgress() {
     const all = featureProgress();
@@ -1386,17 +1455,21 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       th.setAttribute('aria-sort', state.fSortKey === th.dataset.sort ? (state.fSortDir === 'desc' ? 'descending' : 'ascending') : 'none');
     });
     const limit = state.fShowAll ? open.length : FEATURE_PROGRESS_ROWS;
-    $('fprog').querySelector('tbody').innerHTML = open.slice(0, limit).map((f) => {
+    $('fprog').querySelector('tbody').innerHTML = open.slice(0, limit).map((f, row) => {
       const pct = Math.round(100 * progressOf(f));
+      const expanded = state.fExpanded.has(f.name);
+      const { first } = featureFacts(f);
+      const tip = `${f.name}: ${f.total} items${first ? ' since ' + dayLabel(first.added, { year: 'numeric' }) : ''}; ${f.done} done, ${f.open} open, ${f.dropped} dropped. Select to ${expanded ? 'hide' : 'list'} the open items.`;
+      const detailId = `fdetail-${row}`;
       const parts = [['done', f.done, 's-done'], ['dropped', f.dropped, 's-drop'], ['open', f.open, 's-open']];
       const said = `${f.name}: ${f.done} of ${f.total} done, ${f.open} open, ${f.dropped} dropped`;
-      return `<tr>
-        <td class="feat">${esc(f.name)}</td>
+      return `<tr class="frow${expanded ? ' expanded' : ''}">
+        <td class="feat"><button type="button" class="fname" data-feature="${esc(f.name)}" aria-expanded="${expanded}"${expanded ? ` aria-controls="${detailId}"` : ''} title="${esc(tip)}"><span class="caret" aria-hidden="true"></span><span class="fn">${esc(f.name)}</span></button></td>
         <td class="pcell"><span class="pb" role="img" aria-label="${esc(said)}" title="${esc(said)}">${seg(parts, f.total)}</span><span class="pct num">${pct}%</span></td>
         <td class="num">${n(f.done)}<span class="quiet-n">/${n(f.total)}</span></td>
         <td class="num left">${n(f.open)}</td>
         <td class="num drop-col${f.dropped ? '' : ' quiet-n'}">${n(f.dropped)}</td>
-      </tr>`;
+      </tr>${expanded ? `<tr class="fdetail" id="${detailId}"><td colspan="5">${featureDetail(f)}</td></tr>` : ''}`;
     }).join('') || '<tr class="empty-row"><td colspan="5">Every feature is complete: nothing assigned to one is open.</td></tr>';
     const more = $('fprog-more');
     more.hidden = open.length <= FEATURE_PROGRESS_ROWS;
@@ -1404,7 +1477,6 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
   }
 
   function renderList(b) {
-    const prioRank = (it) => (it.status === 'untriaged' ? 9 : ({ P0: 0, P1: 1, P2: 2, P3: 3 }[it.priority] ?? 8));
     // Each tab's own order, which breaks ties within one set of tags.
     const defaultSort = (a, z) => {
       if (state.list === 'added') return z.added - a.added || z.id.localeCompare(a.id);
@@ -1601,6 +1673,15 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       state.fSortDir = state.fSortKey === key ? (state.fSortDir === 'asc' ? 'desc' : 'asc') : FSORT_DEFAULT_DIR[key];
       state.fSortKey = key;
       renderFeatureProgress(); return;
+    }
+    const fb = e.target.closest('#fprog button.fname');
+    if (fb && state.meta) {
+      const name = fb.dataset.feature;
+      if (!state.fExpanded.delete(name)) state.fExpanded.add(name);
+      renderFeatureProgress();
+      const again = [...document.querySelectorAll('#fprog button.fname')].find((el) => el.dataset.feature === name);
+      if (again) again.focus();
+      return;
     }
     if (e.target.id === 'fprog-more') { state.fShowAll = !state.fShowAll; renderFeatureProgress(); return; }
     if (e.target.id === 'more') { state.showAll = !state.showAll; renderList(bounds()); return; }
