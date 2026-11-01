@@ -16,6 +16,7 @@
   --cleared: #3b8a3e; --cleared-ink: #2b6c2e; --cleared-tint: #ecf5e9; --clr-fill: rgba(59, 138, 62, 0.66);
   --open: #1d62a8; --open-ink: #1a5794; --open-tint: #e9f1fa;
   --warn: #8a5500; --warn-tint: #fff4dc; --chip: #e9edf3;
+  --dropped: #aab3c0;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   color-scheme: light;
   box-sizing: border-box;
@@ -30,6 +31,7 @@
     --cleared: #69b96c; --cleared-ink: #92d294; --cleared-tint: #17241a; --clr-fill: rgba(105, 185, 108, 0.60);
     --open: #71a7e6; --open-ink: #98c1f1; --open-tint: #152233;
     --warn: #f0b64a; --warn-tint: #2d2412; --chip: #232932;
+    --dropped: #59626f;
     color-scheme: dark;
   }
 }
@@ -40,6 +42,7 @@
   --cleared: #69b96c; --cleared-ink: #92d294; --cleared-tint: #17241a; --clr-fill: rgba(105, 185, 108, 0.60);
   --open: #71a7e6; --open-ink: #98c1f1; --open-tint: #152233;
   --warn: #f0b64a; --warn-tint: #2d2412; --chip: #232932;
+  --dropped: #59626f;
   color-scheme: dark;
 }
 html { scroll-padding-top: env(safe-area-inset-top, 0px); }
@@ -194,6 +197,20 @@ table.feat-t .wk { text-align: center; width: 52px; font-variant-numeric: tabula
 table.feat-t td.heat { background: color-mix(in srgb, var(--new) calc(var(--a) * 100%), transparent); background-clip: padding-box; border-left: 2px solid var(--panel); border-right: 2px solid var(--panel); font-weight: 700; font-size: 13px; }
 table.feat-t td.heat.dark { color: var(--paper); }
 
+/* Open features: done, dropped and open, the three marks bin/docket feature draws */
+.bar i.s-done, .pb i.s-done, .comp-legend i.s-done { background: var(--cleared); opacity: 1; }
+.bar i.s-drop, .pb i.s-drop, .comp-legend i.s-drop { background: var(--dropped); opacity: 1; }
+.bar i.s-open, .pb i.s-open, .comp-legend i.s-open { background: var(--open); opacity: 1; }
+table.prog-t td, table.prog-t th { padding: 6px 8px 6px 4px; vertical-align: middle; }
+table.prog-t th.num, table.prog-t td.num { text-align: right; }
+table.prog-t .feat { max-width: 26ch; overflow-wrap: break-word; }
+table.prog-t .pcell { width: 44%; min-width: 150px; white-space: nowrap; }
+table.prog-t .pb { display: inline-flex; vertical-align: middle; width: calc(100% - 3.6em); min-width: 70px; height: 8px; border-radius: 4px; overflow: hidden; gap: 2px; background: var(--paper); margin-right: 8px; }
+table.prog-t .pb i { display: block; height: 100%; min-width: 2px; }
+table.prog-t .pct { display: inline-block; min-width: 2.8em; text-align: right; color: var(--ink-2); font-size: 13px; }
+table.prog-t .left { font-weight: 700; color: var(--open-ink); }
+table.prog-t .quiet-n { color: var(--muted); }
+
 /* Item list controls */
 .controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin: 4px 0 12px; }
 .seg { display: inline-flex; background: var(--paper); border-radius: 10px; padding: 3px; gap: 2px; }
@@ -232,6 +249,9 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
   table.feat-t .wk { width: 36px; }
   table.feat-t td, table.feat-t th { padding: 6px 3px; }
   table.feat-t th { white-space: normal; }
+  table.prog-t .drop-col { display: none; }
+  table.prog-t .pcell { min-width: 110px; }
+  table.prog-t td, table.prog-t th { padding: 6px 3px; }
   table.stack thead { display: none; }
   table.stack, table.stack tbody, table.stack tr, table.stack td { display: block; width: 100%; }
   table.stack tr { padding: 10px 0; border-bottom: 1px solid var(--rule); }
@@ -374,6 +394,29 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     <section class="panel">
       <div class="panel-head">
         <div>
+          <h2>Open features</h2>
+          <p class="panel-sub num" id="fprog-sub"></p>
+        </div>
+      </div>
+      <div class="comp" id="fprog-sum"></div>
+      <div class="table-scroll" style="margin-top:16px">
+        <table class="t prog-t" id="fprog">
+          <thead><tr>
+            <th data-sort="name" tabindex="0"><span class="label">Feature</span><span class="arrow" aria-hidden="true"></span></th>
+            <th data-sort="progress" tabindex="0" title="Done over all of the feature's items, dropped included, as bin/docket feature counts"><span class="label">Progress</span><span class="arrow" aria-hidden="true"></span></th>
+            <th class="num" data-sort="done" tabindex="0"><span class="label">Done</span><span class="arrow" aria-hidden="true"></span></th>
+            <th class="num" data-sort="open" tabindex="0"><span class="label">Open</span><span class="arrow" aria-hidden="true"></span></th>
+            <th class="num drop-col" data-sort="dropped" tabindex="0"><span class="label">Dropped</span><span class="arrow" aria-hidden="true"></span></th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="more"><button type="button" class="btn" id="fprog-more" hidden>Show all</button></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
           <h2>Items</h2>
           <p class="panel-sub" id="list-sub"></p>
         </div>
@@ -490,7 +533,11 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     // The table opens sorted on its date column, newest first: Added on the
     // Open now and Added tabs, Closed on the Cleared tab.
     sortKey: 'date', sortDir: 'desc',
+    // The Open features table opens with the most work left at the top.
+    fSortKey: 'open', fSortDir: 'desc', fShowAll: false,
   };
+  const FSORT_DEFAULT_DIR = { name: 'asc', progress: 'desc', done: 'desc', open: 'desc', dropped: 'desc' };
+  const FEATURE_PROGRESS_ROWS = 12;
   // Which direction a column starts in on its first click: newest-first for
   // dates, highest-priority-first for priority, A-Z for the text columns.
   const SORT_DEFAULT_DIR = { date: 'desc', item: 'asc', lane: 'asc', tags: 'asc', state: 'asc', priority: 'asc', filed: 'desc' };
@@ -1150,7 +1197,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     const wf = workflowUrl();
     if (stale) problems.push(`No refresh for ${esc(ago(gen).replace(' ago', ''))}, against a ${every}-minute schedule. GitHub runs schedules on a best-effort basis and switches them off after 60 days without repository activity.${wf ? ` <a href="${esc(wf)}" target="_blank" rel="noopener noreferrer">Check the workflow</a>.` : ''}`);
     if (ck.docket_open != null && ck.docket_open !== ck.extractor_open) problems.push(`Open count differs from docket's own digest (${n(ck.extractor_open)} here, ${n(ck.docket_open)} in docket). The item format may have changed; extract.py needs a look.`);
-    if ((ck.unknown_statuses || []).length) problems.push(`Unrecognised statuses in the store: ${ck.unknown_statuses.map(esc).join(', ')}. Those items are counted neither open nor cleared.`);
+    if ((ck.unknown_statuses || []).length) problems.push(`Unrecognised statuses in the store: ${ck.unknown_statuses.map(esc).join(', ')}. Those items are counted neither open nor cleared, except under Open features, which counts them open as docket does.`);
     const banner = $('banner');
     banner.innerHTML = problems.length ? `<div><strong>Check this.</strong> ${problems.join(' ')}</div>` : '';
     banner.hidden = !problems.length;
@@ -1280,6 +1327,82 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     }).join('');
   }
 
+  // Every `feature:` group, counted the way `bin/docket feature` counts it
+  // (docket's plan.Feature): items grouped on the name exactly as written,
+  // `done` the numerator, and what is left everything neither done nor
+  // dropped -- docket's `is_open`, so a status it does not know is left work
+  // there and here alike. A dropped item is in the total and in neither of the
+  // other two, which is why docket can print "18/28 done (9 left)". A feature
+  // is complete once nothing in it is left, whatever share of it was dropped.
+  function featureProgress() {
+    const by = new Map();
+    for (const it of state.items) {
+      if (!it.feature) continue;
+      let f = by.get(it.feature);
+      if (!f) by.set(it.feature, (f = { name: it.feature, total: 0, done: 0, dropped: 0, open: 0 }));
+      f.total++;
+      if (it.status === 'done') f.done++;
+      else if (it.status === 'dropped') f.dropped++;
+      else f.open++;
+    }
+    return [...by.values()];
+  }
+  const progressOf = (f) => f.done / f.total;
+  // Most left first, then nearest to finished, then A-Z: the default order,
+  // and every column sort's tie-breaker.
+  const featureOrder = (a, z) => z.open - a.open || progressOf(z) - progressOf(a) || a.name.localeCompare(z.name);
+  const docketLine = (f) => `${f.name} ${f.done}/${f.total} done (${f.open} left)`;
+
+  function renderFeatureProgress() {
+    const all = featureProgress();
+    const open = all.filter((f) => f.open);
+    const complete = all.length - open.length;
+    const unassigned = state.items.filter((it) => !it.feature).length;
+    $('fprog-sub').textContent = all.length
+      ? `${n(open.length)} of ${n(all.length)} features still have open items; ${n(complete)} are complete, with nothing left open. Read at this snapshot, whatever the range, as bin/docket feature reads it. ${n(unassigned)} items carry no feature and are not counted here.`
+      : 'No item carries a feature.';
+    const sum = (key) => open.reduce((s, f) => s + f[key], 0);
+    const seg = (parts, total) => parts.map(([, v, cls]) => (v ? `<i class="${cls}" style="width:${((v / total) * 100).toFixed(2)}%"></i>` : '')).join('');
+    const legend = (parts) => parts.map(([k, v, cls]) => `<span><i class="${cls}"></i>${esc(k)} <b class="num">${n(v)}</b></span>`).join('');
+    const rows = [
+      ['Features', [['Complete', complete, 's-done'], ['Open', open.length, 's-open']]],
+      [`Items in the ${n(open.length)} open features`, [['Done', sum('done'), 's-done'], ['Dropped', sum('dropped'), 's-drop'], ['Open', sum('open'), 's-open']]],
+    ];
+    $('fprog-sum').innerHTML = all.length ? rows.map(([title, parts]) => {
+      const total = Math.max(1, parts.reduce((s, [, v]) => s + v, 0));
+      return `<div class="comp-row"><h3>${esc(title)}</h3><div class="bar" role="img" aria-label="${esc(title + ': ' + parts.map(([k, v]) => k + ' ' + v).join(', '))}">${seg(parts, total)}</div><div class="comp-legend">${legend(parts)}</div></div>`;
+    }).join('') : '';
+
+    const mul = state.fSortDir === 'desc' ? -1 : 1;
+    const byKey = {
+      name: (a, z) => a.name.localeCompare(z.name),
+      progress: (a, z) => progressOf(a) - progressOf(z),
+      done: (a, z) => a.done - z.done,
+      open: (a, z) => a.open - z.open,
+      dropped: (a, z) => a.dropped - z.dropped,
+    }[state.fSortKey];
+    open.sort((a, z) => byKey(a, z) * mul || featureOrder(a, z));
+    $('fprog').querySelectorAll('thead th[data-sort]').forEach((th) => {
+      th.setAttribute('aria-sort', state.fSortKey === th.dataset.sort ? (state.fSortDir === 'desc' ? 'descending' : 'ascending') : 'none');
+    });
+    const limit = state.fShowAll ? open.length : FEATURE_PROGRESS_ROWS;
+    $('fprog').querySelector('tbody').innerHTML = open.slice(0, limit).map((f) => {
+      const pct = Math.round(100 * progressOf(f));
+      const parts = [['done', f.done, 's-done'], ['dropped', f.dropped, 's-drop'], ['open', f.open, 's-open']];
+      const said = `${f.name}: ${f.done} of ${f.total} done, ${f.open} open, ${f.dropped} dropped`;
+      return `<tr>
+        <td class="feat">${esc(f.name)}</td>
+        <td class="pcell"><span class="pb" role="img" aria-label="${esc(said)}" title="${esc(said)}">${seg(parts, f.total)}</span><span class="pct num">${pct}%</span></td>
+        <td class="num">${n(f.done)}<span class="quiet-n">/${n(f.total)}</span></td>
+        <td class="num left">${n(f.open)}</td>
+        <td class="num drop-col${f.dropped ? '' : ' quiet-n'}">${n(f.dropped)}</td>
+      </tr>`;
+    }).join('') || '<tr class="empty-row"><td colspan="5">Every feature is complete: nothing assigned to one is open.</td></tr>';
+    const more = $('fprog-more');
+    more.hidden = open.length <= FEATURE_PROGRESS_ROWS;
+    more.textContent = state.fShowAll ? `Show the first ${FEATURE_PROGRESS_ROWS}` : `Show all ${n(open.length)}`;
+  }
+
   function renderList(b) {
     const prioRank = (it) => (it.status === 'untriaged' ? 9 : ({ P0: 0, P1: 1, P2: 2, P3: 3 }[it.priority] ?? 8));
     // Each tab's own order, which breaks ties within one set of tags.
@@ -1397,6 +1520,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     renderCharts(b);
     renderBranches();
     renderComposition();
+    renderFeatureProgress();
     renderList(b);
     renderFooter();
   }
@@ -1411,6 +1535,8 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     const open = items.filter((i) => OPEN.includes(i.status));
     const c = (pred) => open.filter(pred).length;
     const repeats = open.filter((i) => timesFiled(i) > 1).sort((a, z) => timesFiled(z) - timesFiled(a));
+    const feats = featureProgress();
+    const openFeats = feats.filter((f) => f.open).sort(featureOrder);
     const lanes = (pool) => ['p', 'w', 'c', 'u'].map((code) => {
       const a = aggregate(pool.filter((i) => i.lane === code), b.start, b.end);
       return `${LANE_NAME[code].toLowerCase()} ${a.added} new / ${a.cleared} cleared / ${a.open} open`;
@@ -1425,6 +1551,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       `Last ${window} days: ${wk.f} added, ${wk.c} cleared${wk.ratio != null ? ` (${wk.ratio.toFixed(2)} added per cleared)` : ''}`,
       `Open by status: ready ${c((i) => i.status === 'ready')}, needs-decision ${c((i) => i.status === 'needs-decision')}, blocked ${c((i) => i.status === 'blocked')}, untriaged ${c((i) => i.status === 'untriaged')}`,
       `Open by priority: P0 ${c((i) => i.status !== 'untriaged' && i.priority === 'P0')}, P1 ${c((i) => i.status !== 'untriaged' && i.priority === 'P1')}, P2 ${c((i) => i.status !== 'untriaged' && i.priority === 'P2')}, P3 ${c((i) => i.status !== 'untriaged' && i.priority === 'P3')}`,
+      `Open features (${openFeats.length} of ${feats.length}; ${feats.length - openFeats.length} complete): ${openFeats.length ? openFeats.map(docketLine).join(', ') : 'none'}`,
       `Open items filed more than once: ${repeats.length ? repeats.map((i) => `${i.id} ${timesFiled(i)}x`).join(', ') : 'none'}`,
       `By lane over the range: ${lanes(items)}`,
       `Defects (classed defect) by lane over the range: ${lanes(items.filter(isDefect))}`,
@@ -1468,11 +1595,19 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       state.sortKey = key;
       renderList(bounds()); return;
     }
+    const fth = e.target.closest('#fprog thead th[data-sort]');
+    if (fth && state.meta) {
+      const key = fth.dataset.sort;
+      state.fSortDir = state.fSortKey === key ? (state.fSortDir === 'asc' ? 'desc' : 'asc') : FSORT_DEFAULT_DIR[key];
+      state.fSortKey = key;
+      renderFeatureProgress(); return;
+    }
+    if (e.target.id === 'fprog-more') { state.fShowAll = !state.fShowAll; renderFeatureProgress(); return; }
     if (e.target.id === 'more') { state.showAll = !state.showAll; renderList(bounds()); return; }
     if (e.target.id === 'copy-summary' && state.meta) { copyText(summaryText(), e.target); return; }
   });
   document.addEventListener('keydown', (e) => {
-    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('#items thead th[data-sort]')) { e.preventDefault(); e.target.click(); }
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('#items thead th[data-sort], #fprog thead th[data-sort]')) { e.preventDefault(); e.target.click(); }
   });
   $('lane-filter').addEventListener('change', (e) => { state.lane = e.target.value; state.showAll = false; if (state.meta) renderList(bounds()); });
   $('tag-filter').addEventListener('change', (e) => { state.tag = e.target.value; state.showAll = false; if (state.meta) renderList(bounds()); });
