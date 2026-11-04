@@ -187,7 +187,7 @@ pre { white-space: pre-wrap; word-break: break-word; font-family: var(--mono); f
 
 /* Defects by feature */
 table.feat-t td, table.feat-t th { padding: 6px 8px 6px 4px; }
-table.feat-t .feat { max-width: 22ch; overflow-wrap: anywhere; }
+table.feat-t .feat { max-width: 22ch; overflow-wrap: break-word; }
 table.feat-t .fbar { min-width: 120px; white-space: nowrap; }
 table.feat-t .fb { display: inline-block; vertical-align: middle; width: calc(100% - 3.2em); min-width: 60px; height: 10px; border-radius: 5px; background: var(--paper); overflow: hidden; margin-right: 6px; }
 table.feat-t .fb i { display: block; height: 100%; background: var(--new); border-radius: 5px; }
@@ -251,6 +251,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
   table.feat-t .wk { width: 36px; }
   table.feat-t td, table.feat-t th { padding: 6px 3px; }
   table.feat-t th { white-space: normal; }
+  table.feat-t th[aria-sort="none"] .arrow { display: none; }
   table.prog-t .drop-col { display: none; }
   table.prog-t .pcell { min-width: 110px; }
   table.prog-t td, table.prog-t th { padding: 6px 3px; }
@@ -364,6 +365,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       <h2>Defects by feature</h2>
       <p class="panel-sub num" id="feat-sub"></p>
       <div class="table-scroll" id="features"></div>
+      <div class="more"><button type="button" class="btn" id="feat-more" hidden>Show all</button></div>
     </section>
 
     <section class="panel">
@@ -537,6 +539,8 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     sortKey: 'date', sortDir: 'desc',
     // The Open features table opens with the most work left at the top.
     fSortKey: 'open', fSortDir: 'desc', fShowAll: false,
+    // Defects by feature opens with the most open defects at the top.
+    featSortKey: 'open', featSortDir: 'desc', featShowAll: false,
   };
   const FSORT_DEFAULT_DIR = { name: 'asc', progress: 'desc', done: 'desc', open: 'desc', dropped: 'desc' };
   const FEATURE_PROGRESS_ROWS = 12;
@@ -1119,12 +1123,16 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     host.onblur = hide;
   }
 
-  // Defects added in the range, by their `feature:`, most first: a Pareto
-  // list with how many of each row's defects are open now, each feature's
-  // running share of the range's defects, then the same counts split into
-  // 7-day columns ending on the range's last day, so a feature that keeps
-  // producing defects shows as a row that stays dark.
+  // Defects added in the range, by their `feature:`: how many of each row's
+  // defects are open now, the running share of the range's defects down the
+  // list in its current order, then the same counts split into 7-day columns
+  // ending on the range's last day, so a feature that keeps producing defects
+  // shows as a row that stays dark. Every column sorts, over all features
+  // rather than only the rows on show, and the table opens with the most open
+  // defects at the top. Ties go to the feature with more defects.
   const FEATURE_ROWS = 10;
+  // Week columns sort as wk0 (the latest week), wk1 and so on, newest first.
+  const FEAT_SORT_DEFAULT_DIR = { name: 'asc', count: 'desc', open: 'desc', share: 'desc' };
   function renderFeatures(defects, b) {
     const inRange = defects.filter((it) => it.added != null && it.added >= b.start && it.added <= b.end);
     const total = inRange.length;
@@ -1143,25 +1151,47 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       const w = Math.floor((b.end - it.added) / 7); // 0 is the latest 7 days
       if (w < weeks) row.week[weeks - 1 - w]++;
     }
-    const rows = [...byFeature.values()].sort((a, c) => c.count - a.count || a.key.localeCompare(c.key)).slice(0, FEATURE_ROWS);
-    const shown = rows.reduce((s, r) => s + r.count, 0);
+    const all = [...byFeature.values()];
+    // A week column the range no longer reaches falls back to the default.
+    const weekAge = (k) => (/^wk\d$/.test(k) ? Number(k.slice(2)) : -1);
+    if (weekAge(state.featSortKey) >= weeks) { state.featSortKey = 'open'; state.featSortDir = 'desc'; }
+    const key = state.featSortKey;
+    const wkAge = weekAge(key);
+    const mul = state.featSortDir === 'desc' ? -1 : 1;
+    // "no feature set" goes last in a name sort, whichever way it runs.
+    const byName = (a, z) => (!a.key) - (!z.key) || a.key.localeCompare(z.key);
+    const pareto = (a, z) => z.count - a.count || byName(a, z);
+    const val = wkAge >= 0 ? (r) => r.week[weeks - 1 - wkAge]
+      : { count: (r) => r.count, share: (r) => r.count, open: (r) => r.open }[key];
+    all.sort((a, z) => (key === 'name'
+      ? (!a.key) - (!z.key) || mul * a.key.localeCompare(z.key)
+      : mul * (val(a) - val(z))) || pareto(a, z));
+    const topShare = all.map((r) => r.count).sort((a, z) => z - a).slice(0, FEATURE_ROWS).reduce((s, v) => s + v, 0);
     $('feat-sub').textContent = total
-      ? `${n(total)} defects added in the range across ${n(byFeature.size)} features, ${n(totalOpen)} of them open now; the top ${n(rows.length)} carry ${Math.round((100 * shown) / total)}%. Running % is the share of the range's defects in that row and every row above it.`
+      ? `${n(total)} defects added in the range across ${n(all.length)} features, ${n(totalOpen)} of them open now; the ${n(Math.min(FEATURE_ROWS, all.length))} with the most defects carry ${Math.round((100 * topShare) / total)}%. Running % adds up each row's share of the range's defects down the list, in the order it is sorted.`
       : 'No defects added in the range.';
     const host = $('features');
+    const more = $('feat-more');
+    more.hidden = all.length <= FEATURE_ROWS;
+    more.textContent = state.featShowAll ? `Show the first ${FEATURE_ROWS}` : `Show all ${n(all.length)}`;
     if (!total) { host.innerHTML = ''; return; }
-    const maxCount = rows[0].count;
-    const maxCell = Math.max(1, ...rows.flatMap((r) => r.week));
+    const rows = state.featShowAll ? all : all.slice(0, FEATURE_ROWS);
+    const maxCount = Math.max(...all.map((r) => r.count));
+    const maxCell = Math.max(1, ...all.flatMap((r) => r.week));
     const weekStart = (k) => Math.max(b.start, b.end - 7 * (weeks - k) + 1);
-    const age = (k) => ` age${weeks - 1 - k}`; // 0 is the latest week
+    const ageOf = (k) => weeks - 1 - k; // 0 is the latest week
+    const th = (sortKey, label, cls, title) => {
+      const sorted = key === sortKey ? (state.featSortDir === 'desc' ? 'descending' : 'ascending') : 'none';
+      return `<th class="${cls}" data-sort="${sortKey}" tabindex="0" aria-sort="${sorted}"${title ? ` title="${esc(title)}"` : ''}><span class="label">${label}</span><span class="arrow" aria-hidden="true"></span></th>`;
+    };
+    const head = `<tr>${th('name', 'Feature', '')}${th('count', 'Defects', '')}${th('open', 'Open now', 'num', "How many of this row's defects are open now")}${th('share', 'Running %', 'num', "This row's defects plus every row above it, as a share of all defects added in the range. It follows the sort order; sorting on it sorts by Defects.")}${[...Array(weeks).keys()]
+      .map((k) => th('wk' + ageOf(k), esc(dayLabel(weekStart(k))), `wk age${ageOf(k)}`, `Defects added in the 7 days from ${dayLabel(weekStart(k))}`)).join('')}</tr>`;
     let acc = 0;
-    const head = `<tr><th>Feature</th><th>Defects</th><th class="num" title="How many of this row's defects are open now">Open now</th><th class="num" title="This row's defects plus every row above it, as a share of all defects added in the range">Running %</th>${[...Array(weeks).keys()]
-      .map((k) => `<th class="wk${age(k)}">${esc(dayLabel(weekStart(k)))}</th>`).join('')}</tr>`;
     const body = rows.map((r) => {
       acc += r.count;
       const cells = r.week.map((v, k) => {
         const a = v ? 0.12 + 0.88 * Math.pow(v / maxCell, 0.6) : 0;
-        return `<td class="wk heat${age(k)}${a > 0.55 ? ' dark' : ''}" style="--a:${a.toFixed(2)}">${v ? n(v) : ''}</td>`;
+        return `<td class="wk heat age${ageOf(k)}${a > 0.55 ? ' dark' : ''}" style="--a:${a.toFixed(2)}">${v ? n(v) : ''}</td>`;
       }).join('');
       const name = r.key ? esc(r.key) : '<span class="tag">no feature set</span>';
       return `<tr><td class="feat">${name}</td>
@@ -1170,6 +1200,12 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
         <td class="num share">${Math.round((100 * acc) / total)}%</td>${cells}</tr>`;
     }).join('');
     host.innerHTML = `<table class="t feat-t"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  }
+  // The header is redrawn on every sort, so a keyboard user's focus goes back
+  // to the column they sorted on.
+  function resortFeatures(focusKey) {
+    renderFeatures(state.items.filter(isDefect), bounds());
+    if (focusKey) { const th = $('features').querySelector(`thead th[data-sort="${focusKey}"]`); if (th) th.focus(); }
   }
 
   const ro = new ResizeObserver((entries) => {
@@ -1588,7 +1624,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
 
   document.addEventListener('click', (e) => {
     const r = e.target.closest('[data-range]');
-    if (r && state.meta) { state.range = r.dataset.range; pref.set('range', state.range); state.showAll = false; renderAll(); return; }
+    if (r && state.meta) { state.range = r.dataset.range; pref.set('range', state.range); state.showAll = false; state.featShowAll = false; renderAll(); return; }
     const l = e.target.closest('[data-list]');
     if (l && state.meta) {
       state.list = l.dataset.list; state.showAll = false;
@@ -1609,12 +1645,20 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       state.fSortKey = key;
       renderFeatureProgress(); return;
     }
+    const dth = e.target.closest('#features thead th[data-sort]');
+    if (dth && state.meta) {
+      const key = dth.dataset.sort;
+      state.featSortDir = state.featSortKey === key ? (state.featSortDir === 'asc' ? 'desc' : 'asc') : (FEAT_SORT_DEFAULT_DIR[key] || 'desc');
+      state.featSortKey = key;
+      resortFeatures(document.activeElement === dth ? key : null); return;
+    }
+    if (e.target.id === 'feat-more' && state.meta) { state.featShowAll = !state.featShowAll; resortFeatures(null); return; }
     if (e.target.id === 'fprog-more') { state.fShowAll = !state.fShowAll; renderFeatureProgress(); return; }
     if (e.target.id === 'more') { state.showAll = !state.showAll; renderList(bounds()); return; }
     if (e.target.id === 'copy-summary' && state.meta) { copyText(summaryText(), e.target); return; }
   });
   document.addEventListener('keydown', (e) => {
-    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('#items thead th[data-sort], #fprog thead th[data-sort]')) { e.preventDefault(); e.target.click(); }
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('#items thead th[data-sort], #fprog thead th[data-sort], #features thead th[data-sort]')) { e.preventDefault(); e.target.click(); }
   });
   $('lane-filter').addEventListener('change', (e) => { state.lane = e.target.value; state.showAll = false; if (state.meta) renderList(bounds()); });
   $('tag-filter').addEventListener('change', (e) => { state.tag = e.target.value; state.showAll = false; if (state.meta) renderList(bounds()); });
