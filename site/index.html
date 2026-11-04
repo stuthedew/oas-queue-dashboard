@@ -192,6 +192,8 @@ table.feat-t .fbar { min-width: 120px; white-space: nowrap; }
 table.feat-t .fb { display: inline-block; vertical-align: middle; width: calc(100% - 3.2em); min-width: 60px; height: 10px; border-radius: 5px; background: var(--paper); overflow: hidden; margin-right: 6px; }
 table.feat-t .fb i { display: block; height: 100%; background: var(--new); border-radius: 5px; }
 table.feat-t .share { color: var(--muted); text-align: right; }
+table.feat-t .open-n { text-align: right; font-weight: 700; color: var(--open-ink); }
+table.feat-t .open-n.none { font-weight: 400; color: var(--muted); }
 table.feat-t th.num { text-align: right; }
 table.feat-t .wk { text-align: center; width: 52px; font-variant-numeric: tabular-nums; }
 table.feat-t td.heat { background: color-mix(in srgb, var(--new) calc(var(--a) * 100%), transparent); background-clip: padding-box; border-left: 2px solid var(--panel); border-right: 2px solid var(--panel); font-weight: 700; font-size: 13px; }
@@ -1118,13 +1120,16 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
   }
 
   // Defects added in the range, by their `feature:`, most first: a Pareto
-  // list with each feature's running share of the range's defects, then the
-  // same counts split into 7-day columns ending on the range's last day, so a
-  // feature that keeps producing defects shows as a row that stays dark.
+  // list with how many of each row's defects are open now, each feature's
+  // running share of the range's defects, then the same counts split into
+  // 7-day columns ending on the range's last day, so a feature that keeps
+  // producing defects shows as a row that stays dark.
   const FEATURE_ROWS = 10;
   function renderFeatures(defects, b) {
     const inRange = defects.filter((it) => it.added != null && it.added >= b.start && it.added <= b.end);
     const total = inRange.length;
+    const isOpen = (it) => OPEN.includes(it.status);
+    const totalOpen = inRange.filter(isOpen).length;
     // Whole weeks only, so every column is seven days; a range's leading odd
     // days count in the totals but in no column.
     const weeks = Math.max(1, Math.min(8, Math.floor((b.end - b.start + 1) / 7)));
@@ -1132,15 +1137,16 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     for (const it of inRange) {
       const key = it.feature || '';
       let row = byFeature.get(key);
-      if (!row) byFeature.set(key, (row = { key, count: 0, week: new Array(weeks).fill(0) }));
+      if (!row) byFeature.set(key, (row = { key, count: 0, open: 0, week: new Array(weeks).fill(0) }));
       row.count++;
+      if (isOpen(it)) row.open++;
       const w = Math.floor((b.end - it.added) / 7); // 0 is the latest 7 days
       if (w < weeks) row.week[weeks - 1 - w]++;
     }
     const rows = [...byFeature.values()].sort((a, c) => c.count - a.count || a.key.localeCompare(c.key)).slice(0, FEATURE_ROWS);
     const shown = rows.reduce((s, r) => s + r.count, 0);
     $('feat-sub').textContent = total
-      ? `${n(total)} defects added in the range across ${n(byFeature.size)} features; the top ${n(rows.length)} carry ${Math.round((100 * shown) / total)}%.`
+      ? `${n(total)} defects added in the range across ${n(byFeature.size)} features, ${n(totalOpen)} of them open now; the top ${n(rows.length)} carry ${Math.round((100 * shown) / total)}%. Running % is the share of the range's defects in that row and every row above it.`
       : 'No defects added in the range.';
     const host = $('features');
     if (!total) { host.innerHTML = ''; return; }
@@ -1149,7 +1155,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     const weekStart = (k) => Math.max(b.start, b.end - 7 * (weeks - k) + 1);
     const age = (k) => ` age${weeks - 1 - k}`; // 0 is the latest week
     let acc = 0;
-    const head = `<tr><th>Feature</th><th>Defects</th><th class="num">Running %</th>${[...Array(weeks).keys()]
+    const head = `<tr><th>Feature</th><th>Defects</th><th class="num" title="How many of this row's defects are open now">Open now</th><th class="num" title="This row's defects plus every row above it, as a share of all defects added in the range">Running %</th>${[...Array(weeks).keys()]
       .map((k) => `<th class="wk${age(k)}">${esc(dayLabel(weekStart(k)))}</th>`).join('')}</tr>`;
     const body = rows.map((r) => {
       acc += r.count;
@@ -1160,6 +1166,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       const name = r.key ? esc(r.key) : '<span class="tag">no feature set</span>';
       return `<tr><td class="feat">${name}</td>
         <td class="fbar"><span class="fb"><i style="width:${((100 * r.count) / maxCount).toFixed(1)}%"></i></span><b class="num">${n(r.count)}</b></td>
+        <td class="num open-n${r.open ? '' : ' none'}">${n(r.open)}</td>
         <td class="num share">${Math.round((100 * acc) / total)}%</td>${cells}</tr>`;
     }).join('');
     host.innerHTML = `<table class="t feat-t"><thead>${head}</thead><tbody>${body}</tbody></table>`;
