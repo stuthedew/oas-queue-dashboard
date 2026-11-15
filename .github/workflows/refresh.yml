@@ -32,12 +32,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Snapshot the docket
         run: python3 extract.py --out site/data --interval-minutes "$INTERVAL_MINUTES" --timezone "$REPORT_TIMEZONE"
-      - uses: actions/upload-pages-artifact@v5
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site
 
@@ -53,7 +53,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
 
   keepalive:
     # GitHub switches off schedules in a public repository after 60 days without
@@ -64,7 +64,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The push below needs the token checkout stores in .git/config.
+          persist-credentials: true
       - name: Commit if the repository has been quiet for 50 days
         run: |
           quiet_days=$(( ( $(date +%s) - $(git log -1 --format=%ct) ) / 86400 ))
