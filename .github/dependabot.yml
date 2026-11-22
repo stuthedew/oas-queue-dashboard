@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # Bumps the SHA-pinned actions in .github/workflows/ and keeps the
+  # "# vX.Y.Z" comment beside each pin in step.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Wait a week after a release before proposing it, so a bad or
+    # compromised release has time to be pulled first.
+    cooldown:
+      default-days: 7

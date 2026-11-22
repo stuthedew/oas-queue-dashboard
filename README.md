@@ -52,3 +52,7 @@ python3 -m http.server -d site 8000     # then open http://localhost:8000
 
 - The site is public, like the repository it reads. A `noindex` tag keeps it out of search results.
 - GitHub switches off schedules in public repositories after 60 days without repository activity. The `keepalive` job makes an empty commit after 50 quiet days so that never happens.
+
+## License
+
+[Apache-2.0](LICENSE).
