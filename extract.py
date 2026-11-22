@@ -2,9 +2,10 @@
 """Snapshot the Open Anesthesia Sim docket for the queue dashboard.
 
 Clones github.com/stuthedew/open-anesthesia-sim into a temporary directory,
-reads docs/items/*.md, runs three read-only `bin/docket` commands (digest,
-flight, stranded), and writes one JSON file the page reads. Nothing here writes
-to the project repository, and the project contains nothing about this one.
+reads docs/items/*.md and the feature descriptions in docs/features.toml, runs
+three read-only `bin/docket` commands (digest, flight, stranded), and writes
+one JSON file the page reads. Nothing here writes to the project repository,
+and the project contains nothing about this one.
 
 Counting rules (they reproduce the 2026-09-13 queue report exactly at 6cd1a1d):
   new      = item whose `added:` date falls in the range
@@ -36,7 +37,7 @@ import tempfile
 import tomllib
 from pathlib import Path
 
-EXTRACTOR_VERSION = 4
+EXTRACTOR_VERSION = 5
 # The zone the page calls a "day". Item `added:`/`closed:` are bare calendar
 # dates, so the report only reads as one clock if "today" is that same zone
 # rather than UTC, which rolls over mid-evening in the US.
@@ -157,6 +158,26 @@ def read_items(repo: Path, items_dir: str, workflow_paths: tuple[str, ...]) -> l
     return rows
 
 
+def feature_descriptions(repo: Path, features_file: str) -> tuple[dict[str, str], str]:
+    """Each feature's one-line description from the registry docket.toml names.
+
+    Mirrors docket's `config.load_feature_registry`: a line is
+    `name = "description"`, or `old = { use = "new" }` for a name merged into
+    another, which describes nothing and is skipped. Returns the descriptions
+    and an error message. A registry that is missing or unreadable gives no
+    descriptions and says why, so the page can flag it instead of quietly
+    showing names with no tooltip.
+    """
+    if not features_file.strip():
+        return {}, "docket.toml names no features_file"
+    try:
+        data = tomllib.loads((repo / features_file).read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        return {}, f"{features_file} could not be read: {exc}"
+    return {name: value.strip() for name, value in data.items()
+            if isinstance(value, str) and value.strip()}, ""
+
+
 def docket(repo: Path, *args: str) -> str:
     """Run a read-only docket command; failure is recorded as empty, never fatal."""
     try:
@@ -225,6 +246,7 @@ def snapshot(repo: Path, args: argparse.Namespace) -> dict:
     cfg = tomllib.loads((repo / "docket.toml").read_text(encoding="utf-8")).get("docket", {})
     workflow_paths = tuple(cfg.get("workflow_paths", ()))
     rows = read_items(repo, cfg.get("items_dir", "docs/items"), workflow_paths)
+    features, features_error = feature_descriptions(repo, cfg.get("features_file", ""))
 
     digest = docket(repo, "digest")
     m = re.search(r"Docket:\s+(\d+)\s+open", digest)
@@ -247,7 +269,9 @@ def snapshot(repo: Path, args: argparse.Namespace) -> dict:
         "workflow_paths_count": len(workflow_paths),
         "check": {"extractor_open": extractor_open,
                   "docket_open": int(m.group(1)) if m else None,
-                  "unknown_statuses": sorted({r[2] for r in rows} - set(OPEN_STATUSES) - set(CLOSED_STATUSES))},
+                  "unknown_statuses": sorted({r[2] for r in rows} - set(OPEN_STATUSES) - set(CLOSED_STATUSES)),
+                  "features_error": features_error},
+        "features": features,
         "branches": branch_facts(repo),
         "flight": parse_flight(docket(repo, "flight")),
         "stranded": parse_stranded(docket(repo, "stranded")),
@@ -304,8 +328,11 @@ def main() -> int:
     at_rec = ITEM_COLUMNS.index("recurrences")
     refiled = sum(1 for r in snap["rows"] if r[at_rec])
     print(f"{refiled} items filed more than once")
+    print(f"{len(meta['features'])} feature descriptions")
     if check["unknown_statuses"]:
         print(f"WARNING: statuses this extractor does not know: {check['unknown_statuses']}")
+    if check["features_error"]:
+        print(f"WARNING: no feature descriptions: {check['features_error']}")
     return 0
 
 
