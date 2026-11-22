@@ -206,8 +206,11 @@ table.feat-t td.heat.dark { color: var(--paper); }
 table.prog-t td, table.prog-t th { padding: 6px 8px 6px 4px; vertical-align: middle; }
 table.prog-t th.num, table.prog-t td.num { text-align: right; }
 table.prog-t .feat { max-width: 26ch; overflow-wrap: break-word; }
-/* A dotted underline marks a feature name that shows its description on hover. */
-.fname { text-decoration: underline dotted var(--muted); text-underline-offset: 3px; cursor: help; }
+/* A feature name is a button that opens its description in a bubble. The dotted underline marks it. */
+button.fname { appearance: none; font: inherit; line-height: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; text-align: left; overflow-wrap: inherit; cursor: help; text-decoration: underline dotted var(--muted); text-underline-offset: 3px; }
+button.fname[data-open] { text-decoration-style: solid; text-decoration-color: currentColor; }
+.ftip { position: absolute; top: 0; left: 0; z-index: 20; }
+.ftip-bubble { display: block; max-width: 340px; padding: 8px 11px; border-radius: 8px; background: var(--ink); color: var(--paper); font-size: 13.5px; line-height: 1.45; font-weight: 400; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18); }
 table.prog-t .pcell { width: 44%; min-width: 150px; white-space: nowrap; }
 table.prog-t .pb { display: inline-flex; vertical-align: middle; width: calc(100% - 3.6em); min-width: 70px; height: 8px; border-radius: 4px; overflow: hidden; gap: 2px; background: var(--paper); margin-right: 8px; }
 table.prog-t .pb i { display: block; height: 100%; min-width: 2px; }
@@ -479,6 +482,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     </footer>
   </main>
 </div>
+<div id="ftip" class="ftip" role="status"></div>
 
 <script>
 (() => {
@@ -569,9 +573,58 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     if (!all) return 'Descriptions appear after the next refresh.';
     return all[name] || 'No description for this feature in docs/features.toml.';
   };
-  // A feature name as both feature tables draw it, with its description as
-  // the hover tooltip.
-  const featureName = (name) => `<span class="fname" title="${esc(featureDescription(name))}">${esc(name)}</span>`;
+  // A feature name as both feature tables draw it: a button that opens its
+  // description in the bubble below.
+  const featureName = (name) => `<button type="button" class="fname" data-desc="${esc(featureDescription(name))}">${esc(name)}</button>`;
+
+  // One bubble shows the description of whichever feature name was opened. A
+  // tap, a click, or Enter or Space opens it, and so does a mouse pointer
+  // resting on the name. A tap or click elsewhere, Escape, moving focus away,
+  // or a redraw of the tables closes it. A mouse-opened bubble also closes when
+  // the pointer leaves the name, unless the name was clicked. The browser's own
+  // title tooltip is not used, because it never appears on a touchscreen.
+  //
+  // This is the toggletip in Heydon Pickering's "Tooltips & Toggletips"
+  // (Inclusive Components, 2017): the trigger is a real button, and the bubble
+  // is written into a role="status" region that stays in the page, so a screen
+  // reader reads the description out when it opens. aria-describedby would read
+  // it before the press instead, and the press would seem to do nothing.
+  const tip = { box: $('ftip'), btn: null, pinned: false, timer: 0 };
+  function closeTip() {
+    clearTimeout(tip.timer);
+    if (tip.btn) tip.btn.removeAttribute('data-open');
+    tip.box.textContent = '';
+    tip.btn = null; tip.pinned = false;
+  }
+  function openTip(btn, pinned) {
+    if (tip.btn !== btn) closeTip();
+    tip.btn = btn; tip.pinned = tip.pinned || pinned;
+    btn.setAttribute('data-open', '');
+    // Emptied and refilled a moment later, so a screen reader announces it again
+    // on a second press. Pickering's example waits 100 ms.
+    tip.box.textContent = '';
+    clearTimeout(tip.timer);
+    tip.timer = setTimeout(() => {
+      if (tip.btn !== btn) return;
+      tip.box.innerHTML = `<span class="ftip-bubble">${esc(btn.dataset.desc)}</span>`;
+      placeTip();
+    }, 100);
+  }
+  // Below the name, or above it when there is no room below, and always
+  // inside the window's width, so a name near the right edge of a phone
+  // screen still shows its whole description.
+  function placeTip() {
+    const bubble = tip.box.firstElementChild;
+    if (!bubble || !tip.btn) return;
+    const gap = 8, vw = document.documentElement.clientWidth, r = tip.btn.getBoundingClientRect();
+    bubble.style.maxWidth = `${Math.min(340, vw - 2 * gap)}px`;
+    const w = bubble.offsetWidth, h = bubble.offsetHeight;
+    const left = Math.max(gap, Math.min(r.left, vw - w - gap));
+    const roomBelow = r.bottom + 6 + h <= window.innerHeight - gap;
+    const top = roomBelow || r.top - 6 - h < gap ? r.bottom + 6 : r.top - 6 - h;
+    tip.box.style.left = `${Math.round(left + window.scrollX)}px`;
+    tip.box.style.top = `${Math.round(top + window.scrollY)}px`;
+  }
 
   /* ---------- data ---------- */
   function assemble(snap) {
@@ -1159,6 +1212,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
   // Week columns sort as wk0 (the latest week), wk1 and so on, newest first.
   const FEAT_SORT_DEFAULT_DIR = { name: 'asc', count: 'desc', open: 'desc', share: 'desc' };
   function renderFeatures(defects, b) {
+    closeTip();
     const inRange = defects.filter((it) => it.added != null && it.added >= b.start && it.added <= b.end);
     const total = inRange.length;
     const isOpen = (it) => OPEN.includes(it.status);
@@ -1423,6 +1477,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
   const docketLine = (f) => `${f.name} ${f.done}/${f.total} done (${f.open} left)`;
 
   function renderFeatureProgress() {
+    closeTip();
     const all = featureProgress();
     const open = all.filter((f) => f.open);
     const complete = all.length - open.length;
@@ -1649,6 +1704,8 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
   }
 
   document.addEventListener('click', (e) => {
+    const fname = e.target.closest('button.fname');
+    if (fname) { openTip(fname, true); return; }
     const r = e.target.closest('[data-range]');
     if (r && state.meta) { state.range = r.dataset.range; pref.set('range', state.range); state.showAll = false; state.featShowAll = false; renderAll(); return; }
     const l = e.target.closest('[data-list]');
@@ -1683,7 +1740,29 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     if (e.target.id === 'more') { state.showAll = !state.showAll; renderList(bounds()); return; }
     if (e.target.id === 'copy-summary' && state.meta) { copyText(summaryText(), e.target); return; }
   });
+  // Closing the description bubble. pointerdown rather than click, so that any
+  // touch elsewhere closes it, including one that starts a scroll.
+  document.addEventListener('pointerdown', (e) => {
+    if (tip.btn && !e.target.closest('button.fname, #ftip')) closeTip();
+  });
+  document.addEventListener('pointerover', (e) => {
+    const f = e.pointerType === 'mouse' && e.target.closest('button.fname');
+    if (f && f !== tip.btn && !tip.pinned) openTip(f, false);
+  });
+  document.addEventListener('pointerout', (e) => {
+    if (e.pointerType !== 'mouse' || !tip.btn || tip.pinned) return;
+    if (e.target.closest('button.fname') === tip.btn && !tip.btn.contains(e.relatedTarget)) closeTip();
+  });
+  document.addEventListener('focusout', (e) => {
+    if (tip.btn && e.target === tip.btn && e.relatedTarget) closeTip();
+  });
+  // Scrolling a table sideways moves the name out from under its bubble.
+  document.addEventListener('scroll', (e) => {
+    if (tip.btn && e.target instanceof Element && e.target.contains(tip.btn)) closeTip();
+  }, true);
+  window.addEventListener('resize', placeTip);
   document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && tip.btn) { closeTip(); return; }
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('#items thead th[data-sort], #fprog thead th[data-sort], #features thead th[data-sort]')) { e.preventDefault(); e.target.click(); }
   });
   $('lane-filter').addEventListener('change', (e) => { state.lane = e.target.value; state.showAll = false; if (state.meta) renderList(bounds()); });
