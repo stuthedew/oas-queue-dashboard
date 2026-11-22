@@ -206,6 +206,8 @@ table.feat-t td.heat.dark { color: var(--paper); }
 table.prog-t td, table.prog-t th { padding: 6px 8px 6px 4px; vertical-align: middle; }
 table.prog-t th.num, table.prog-t td.num { text-align: right; }
 table.prog-t .feat { max-width: 26ch; overflow-wrap: break-word; }
+/* A dotted underline marks a feature name that shows its description on hover. */
+table.prog-t .fname { text-decoration: underline dotted var(--muted); text-underline-offset: 3px; cursor: help; }
 table.prog-t .pcell { width: 44%; min-width: 150px; white-space: nowrap; }
 table.prog-t .pb { display: inline-flex; vertical-align: middle; width: calc(100% - 3.6em); min-width: 70px; height: 8px; border-radius: 4px; overflow: hidden; gap: 2px; background: var(--paper); margin-right: 8px; }
 table.prog-t .pb i { display: block; height: 100%; min-width: 2px; }
@@ -1253,6 +1255,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
     if (stale) problems.push(`No refresh for ${esc(ago(gen).replace(' ago', ''))}, against a ${every}-minute schedule. GitHub runs schedules on a best-effort basis and switches them off after 60 days without repository activity.${wf ? ` <a href="${esc(wf)}" target="_blank" rel="noopener noreferrer">Check the workflow</a>.` : ''}`);
     if (ck.docket_open != null && ck.docket_open !== ck.extractor_open) problems.push(`Open count differs from docket's own digest (${n(ck.extractor_open)} here, ${n(ck.docket_open)} in docket). The item format may have changed; extract.py needs a look.`);
     if ((ck.unknown_statuses || []).length) problems.push(`Unrecognised statuses in the store: ${ck.unknown_statuses.map(esc).join(', ')}. Those items are counted neither open nor cleared, except under Open features, which counts them open as docket does.`);
+    if (ck.features_error) problems.push(`Feature names under Open features have no descriptions: ${esc(ck.features_error)}.`);
     const banner = $('banner');
     banner.innerHTML = problems.length ? `<div><strong>Check this.</strong> ${problems.join(' ')}</div>` : '';
     banner.hidden = !problems.length;
@@ -1407,6 +1410,14 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
   // and every column sort's tie-breaker.
   const featureOrder = (a, z) => z.open - a.open || progressOf(z) - progressOf(a) || a.name.localeCompare(z.name);
   const docketLine = (f) => `${f.name} ${f.done}/${f.total} done (${f.open} left)`;
+  // The feature's one line from docs/features.toml, which bin/docket status
+  // and bin/docket feature print beside the name. A snapshot from before the
+  // extractor read that file carries no descriptions at all.
+  const featureDescription = (name) => {
+    const all = state.meta.features;
+    if (!all) return 'Descriptions appear after the next refresh.';
+    return all[name] || 'No description for this feature in docs/features.toml.';
+  };
 
   function renderFeatureProgress() {
     const all = featureProgress();
@@ -1446,7 +1457,7 @@ textarea.copybox { width: 100%; min-height: 150px; font-family: var(--mono); fon
       const parts = [['done', f.done, 's-done'], ['dropped', f.dropped, 's-drop'], ['open', f.open, 's-open']];
       const said = `${f.name}: ${f.done} of ${f.total} done, ${f.open} open, ${f.dropped} dropped`;
       return `<tr>
-        <td class="feat">${esc(f.name)}</td>
+        <td class="feat"><span class="fname" title="${esc(featureDescription(f.name))}">${esc(f.name)}</span></td>
         <td class="pcell"><span class="pb" role="img" aria-label="${esc(said)}" title="${esc(said)}">${seg(parts, f.total)}</span><span class="pct num">${pct}%</span></td>
         <td class="num">${n(f.done)}<span class="quiet-n">/${n(f.total)}</span></td>
         <td class="num left">${n(f.open)}</td>
